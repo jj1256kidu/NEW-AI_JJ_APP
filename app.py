@@ -19,14 +19,19 @@ def initialize_spacy():
         except OSError:
             # If model isn't found, install it using pip
             st.info("Installing spaCy model...")
-            subprocess.check_call([
-                sys.executable, 
-                "-m", 
-                "pip", 
-                "install", 
-                "--no-deps",
-                "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl"
-            ])
+            try:
+                subprocess.check_call([
+                    sys.executable, 
+                    "-m", 
+                    "pip", 
+                    "install", 
+                    "--no-deps",
+                    "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl"
+                ], stderr=subprocess.PIPE)
+            except subprocess.CalledProcessError as e:
+                st.error(f"Failed to install spaCy model: {e.stderr.decode()}")
+                return None
+            
             # Reload spacy after installing the model
             importlib.reload(spacy)
             return spacy.load('en_core_web_sm')
@@ -35,10 +40,14 @@ def initialize_spacy():
         return None
 
 # Import remaining packages
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-import re
+try:
+    import pandas as pd
+    import requests
+    from bs4 import BeautifulSoup
+    import re
+except ImportError as e:
+    st.error(f"Failed to import required packages: {str(e)}")
+    st.stop()
 
 # Load NLP model
 nlp = initialize_spacy()
@@ -72,12 +81,16 @@ if st.button("Analyze"):
         st.warning("Please enter a URL to analyze.")
     else:
         try:
+            # Validate URL format
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+
             # Fetch webpage content
             with st.spinner("Fetching webpage content..."):
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124'
                 }
-                response = requests.get(url, headers=headers, timeout=10)
+                response = requests.get(url, headers=headers, timeout=15)
                 response.raise_for_status()  # Raise an exception for bad status codes
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
@@ -85,9 +98,13 @@ if st.button("Analyze"):
                 text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'])
                 text = ' '.join([elem.get_text(strip=True) for elem in text_elements])
 
+                if not text.strip():
+                    st.warning("No readable content found on the webpage.")
+                    st.stop()
+
             # Analyze content
             with st.spinner("Analyzing content..."):
-                doc = nlp(text)
+                doc = nlp(text[:1000000])  # Limit text length to prevent memory issues
                 results = []
                 seen_names = set()
                 
