@@ -45,12 +45,41 @@ st.markdown("""
         background-color: #1E40AF;
     }
     .metric-card {
-        background-color: #F3F4F6;
-        padding: 1rem;
+        background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
+        padding: 1.5rem;
         border-radius: 0.5rem;
+        color: white;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin: 0.5rem 0;
+    }
+    .metric-title {
+        font-size: 1.1rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        color: rgba(255, 255, 255, 0.9);
+    }
+    .metric-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: white;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+    }
+    .metric-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
     }
     .st-emotion-cache-1y4p8pa {
         max-width: 100rem;
+    }
+    /* Dark mode adjustments */
+    @media (prefers-color-scheme: dark) {
+        .metric-card {
+            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+        }
+        .metric-title {
+            color: rgba(255, 255, 255, 0.95);
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -269,8 +298,9 @@ def main():
                         st.markdown(
                             f"""
                             <div class="metric-card">
-                                <h3>🎯 Total Prospects</h3>
-                                <h2>{len(df)}</h2>
+                                <div class="metric-icon">🎯</div>
+                                <div class="metric-title">Total Prospects</div>
+                                <div class="metric-value">{len(df)}</div>
                             </div>
                             """,
                             unsafe_allow_html=True
@@ -280,8 +310,9 @@ def main():
                         st.markdown(
                             f"""
                             <div class="metric-card">
-                                <h3>✅ Complete Profiles</h3>
-                                <h2>{complete}</h2>
+                                <div class="metric-icon">✅</div>
+                                <div class="metric-title">Complete Profiles</div>
+                                <div class="metric-value">{complete}</div>
                             </div>
                             """,
                             unsafe_allow_html=True
@@ -290,8 +321,9 @@ def main():
                         st.markdown(
                             f"""
                             <div class="metric-card">
-                                <h3>🏢 Companies</h3>
-                                <h2>{df['Company'].nunique()}</h2>
+                                <div class="metric-icon">🏢</div>
+                                <div class="metric-title">Companies</div>
+                                <div class="metric-value">{df['Company'].nunique()}</div>
                             </div>
                             """,
                             unsafe_allow_html=True
