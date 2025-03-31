@@ -13,8 +13,41 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import json
+import openai
+import os
 
-# Initialize spaCy
+# Initialize OpenAI API
+openai.api_key = st.secrets["OPENAI_API_KEY"]
+
+# System prompt for GPT-4
+SYSTEM_PROMPT = """You are an intelligent assistant designed to analyze news articles. When provided with raw extracted content from a news URL, your task is to identify all relevant human individuals mentioned in the article and generate structured insights about each of them.
+
+Instructions:
+1. Parse the given text carefully and identify **real human individuals** only. Avoid generic words, company names, or common nouns.
+2. For each individual, extract the following details:
+   - Full Name
+   - Designation or Role
+   - Company or Organization (if mentioned)
+   - Relevant Quote (if any)
+   - Context or Summary of their mention in the article (1-2 lines)
+
+3. If multiple people are mentioned, list each of them in a structured format.
+4. DO NOT include irrelevant names, fictional characters, or repeated names unless they are mentioned in different contexts.
+5. Make sure each entry is **accurate, concise, and context-aware**.
+
+Respond in JSON format suitable for processing:
+[
+  {
+    "Name": "Full Name",
+    "Designation": "Role/Title",
+    "Company": "Organization",
+    "Quote": "Direct quote if available",
+    "Context": "Brief summary of mention"
+  }
+]
+"""
+
+# Initialize spaCy for backup NER
 @st.cache_resource
 def load_model():
     try:
@@ -34,51 +67,63 @@ if nlp is None:
 st.title("Link2People - AI People Insights")
 st.markdown("Extract detailed insights about people mentioned in any article")
 
-def extract_quote_around_name(text, name, window=100):
-    """Extract a relevant quote around the person's name"""
-    name_pos = text.find(name)
-    if name_pos == -1:
+def extract_people_with_gpt4(text):
+    """Extract people information using GPT-4"""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.3,
+            max_tokens=1500
+        )
+        
+        # Parse the response
+        content = response.choices[0].message.content
+        return json.loads(content)
+    except Exception as e:
+        st.error(f"Error processing with GPT-4: {str(e)}")
         return None
-    
-    start = max(0, name_pos - window)
-    end = min(len(text), name_pos + window)
-    context = text[start:end]
-    
-    quote_match = re.search(r'"([^"]*)"', context)
-    if quote_match:
-        return quote_match.group(1)
-    return None
 
-def extract_context(text, name, window=150):
-    """Extract relevant context around the person's mention"""
-    name_pos = text.find(name)
-    if name_pos == -1:
-        return None
+def extract_people_with_spacy(text, doc):
+    """Fallback extraction using spaCy"""
+    people_insights = []
+    seen_names = set()
     
-    start = max(0, name_pos - window)
-    end = min(len(text), name_pos + window)
-    context = text[start:end].strip()
-    return re.sub(r'\s+', ' ', context)
-
-def get_designation(doc, ent):
-    """Extract designation from surrounding text"""
-    title_patterns = [
-        r"(CEO|Chief\s+[A-Za-z]+\s+Officer|President|Director|Manager|Head\s+of\s+[A-Za-z]+|VP|Vice\s+President|Founder|Co-founder|Executive|Leader|Chairman|Managing Director)",
-        r"(Professor|Doctor|Dr\.|Prof\.|Senior|Junior|Principal|Assistant|Associate)\s+[A-Za-z]+",
-        r"[A-Za-z]+\s+(Manager|Director|Lead|Head|Chief|Officer)"
-    ]
+    for ent in doc.ents:
+        if ent.label_ == 'PERSON' and ent.text.strip() and ent.text not in seen_names:
+            name = ent.text.strip()
+            if len(name.split()) < 2:
+                continue
+            
+            # Get surrounding context
+            start_idx = max(0, ent.start_char - 150)
+            end_idx = min(len(text), ent.end_char + 150)
+            context = text[start_idx:end_idx].strip()
+            
+            # Find organization
+            company = "Unknown"
+            for org in doc.ents:
+                if org.label_ == 'ORG' and abs(org.start - ent.start) < 10:
+                    company = org.text
+                    break
+            
+            # Extract quote if available
+            quote_match = re.search(r'"([^"]*)"', context)
+            quote = quote_match.group(1) if quote_match else "No direct quote found"
+            
+            people_insights.append({
+                "Name": name,
+                "Designation": "Unknown",
+                "Company": company,
+                "Quote": quote,
+                "Context": context
+            })
+            seen_names.add(name)
     
-    start_idx = max(0, ent.start_char - 100)
-    end_idx = min(len(doc.text), ent.end_char + 100)
-    context = doc.text[start_idx:end_idx]
-    
-    for pattern in title_patterns:
-        matches = re.finditer(pattern, context, re.IGNORECASE)
-        for match in matches:
-            if abs(match.start() - (ent.start_char - start_idx)) < 50:
-                return match.group(0)
-    
-    return "Unknown"
+    return people_insights
 
 # URL input
 url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
@@ -110,35 +155,13 @@ if st.button("Analyze"):
 
             # Analyze content
             with st.spinner("Analyzing people mentions..."):
-                doc = nlp(text[:1000000])  # Limit text length to prevent memory issues
-                people_insights = []
-                seen_names = set()
+                # Try GPT-4 first
+                people_insights = extract_people_with_gpt4(text)
                 
-                for ent in doc.ents:
-                    if ent.label_ == 'PERSON' and ent.text.strip() and ent.text not in seen_names:
-                        name = ent.text.strip()
-                        if len(name.split()) < 2:  # Skip single word names
-                            continue
-                        
-                        designation = get_designation(doc, ent)
-                        
-                        company = "Unknown"
-                        for org in doc.ents:
-                            if org.label_ == 'ORG' and abs(org.start - ent.start) < 10:
-                                company = org.text
-                                break
-                        
-                        quote = extract_quote_around_name(text, name)
-                        context = extract_context(text, name)
-                        
-                        people_insights.append({
-                            "Name": name,
-                            "Designation": designation,
-                            "Company": company,
-                            "Quote": quote if quote else "No direct quote found",
-                            "Context": context if context else "No additional context found"
-                        })
-                        seen_names.add(name)
+                # Fallback to spaCy if GPT-4 fails
+                if people_insights is None:
+                    doc = nlp(text[:1000000])
+                    people_insights = extract_people_with_spacy(text, doc)
 
             # Display results
             if people_insights:
