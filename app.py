@@ -26,120 +26,169 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS for styling
+# Custom CSS for styling with new background
 st.markdown("""
 <style>
+    /* Modern Gradient Background */
+    .stApp {
+        background: linear-gradient(
+            135deg,
+            #1A1F38 0%,
+            #20294E 50%,
+            #254153 100%
+        );
+        background-attachment: fixed;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    /* Animated particles effect */
+    .stApp::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: 
+            radial-gradient(circle at 20% 30%, rgba(0, 163, 255, 0.1) 0%, transparent 50%),
+            radial-gradient(circle at 80% 70%, rgba(143, 0, 255, 0.1) 0%, transparent 50%),
+            radial-gradient(circle at 50% 50%, rgba(0, 255, 209, 0.1) 0%, transparent 50%);
+        animation: aurora 20s ease infinite;
+        z-index: 0;
+    }
+    
+    @keyframes aurora {
+        0% { transform: rotate(0deg) scale(1); }
+        50% { transform: rotate(180deg) scale(1.2); }
+        100% { transform: rotate(360deg) scale(1); }
+    }
+    
+    /* Ensure content appears above background */
+    .stApp > * {
+        position: relative;
+        z-index: 1;
+    }
+    
     .main-title {
-        font-size: 2.5rem;
+        font-size: 3rem;
         font-weight: bold;
-        color: #1E3A8A;
+        color: #00FFD1;
         margin-bottom: 0;
+        text-shadow: 0 0 10px rgba(0, 255, 209, 0.5);
     }
+    
     .tagline {
-        font-size: 1.2rem;
-        color: #4B5563;
+        font-size: 1.4rem;
+        color: #00A3FF;
         margin-bottom: 0.5rem;
+        text-shadow: 0 0 8px rgba(0, 163, 255, 0.5);
     }
+    
     .sub-tagline {
-        font-size: 1.1rem;
-        color: #6B7280;
+        font-size: 1.2rem;
+        color: #8F00FF;
         font-style: italic;
         margin-bottom: 1rem;
+        text-shadow: 0 0 8px rgba(143, 0, 255, 0.5);
     }
+    
     .stButton > button {
-        background-color: #1E3A8A;
-        color: white;
+        background: linear-gradient(135deg, #00FFD1 0%, #00A3FF 100%);
+        color: #1A1F38;
         width: 100%;
+        font-weight: bold;
+        border: none;
+        transition: all 0.3s ease;
     }
+    
     .stButton > button:hover {
-        background-color: #1E40AF;
+        background: linear-gradient(135deg, #00A3FF 0%, #8F00FF 100%);
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 255, 209, 0.3);
     }
+    
     .metric-card {
-        background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
+        background: rgba(26, 31, 56, 0.7);
+        backdrop-filter: blur(10px);
         padding: 1.5rem;
-        border-radius: 0.5rem;
+        border-radius: 1rem;
         color: white;
         text-align: center;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin: 0.5rem 0;
+        box-shadow: 0 8px 32px rgba(0, 255, 209, 0.1);
+        border: 1px solid rgba(0, 255, 209, 0.1);
+        transition: all 0.3s ease;
     }
+    
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 40px rgba(0, 255, 209, 0.2);
+    }
+    
     .metric-title {
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         font-weight: 500;
         margin-bottom: 0.5rem;
-        color: rgba(255, 255, 255, 0.9);
+        color: #00FFD1;
     }
+    
     .metric-value {
-        font-size: 2rem;
+        font-size: 2.5rem;
         font-weight: bold;
         color: white;
-        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+        text-shadow: 0 0 10px rgba(0, 255, 209, 0.5);
     }
-    .metric-icon {
-        font-size: 1.5rem;
-        margin-bottom: 0.5rem;
-    }
-    .globe-wrapper {
-        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
-        border-radius: 10px;
-        padding: 20px;
-        text-align: center;
-        height: 300px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-top: 20px;
-    }
-    .globe-dots {
-        width: 200px;
-        height: 200px;
-        background: 
-            radial-gradient(circle at 100px 100px, #ffffff, transparent 20%),
-            radial-gradient(circle at 50px 150px, #ffffff, transparent 15%),
-            radial-gradient(circle at 150px 50px, #ffffff, transparent 15%),
-            radial-gradient(circle at 175px 125px, #ffffff, transparent 10%),
-            radial-gradient(circle at 25px 75px, #ffffff, transparent 10%);
-        border-radius: 50%;
-        animation: rotate 20s linear infinite;
-    }
-    @keyframes rotate {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-    .st-emotion-cache-1y4p8pa {
-        max-width: 100rem;
-    }
-    /* Dark mode adjustments */
-    @media (prefers-color-scheme: dark) {
-        .metric-card {
-            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
-        }
-        .metric-title {
-            color: rgba(255, 255, 255, 0.95);
-        }
-    }
+    
     /* Tab styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
+        background: rgba(26, 31, 56, 0.7);
+        padding: 10px;
+        border-radius: 10px;
+        backdrop-filter: blur(10px);
     }
+    
     .stTabs [data-baseweb="tab"] {
         height: 50px;
-        white-space: pre-wrap;
-        background-color: #f3f4f6;
-        border-radius: 4px;
-        gap: 8px;
-        padding: 8px 16px;
+        background: rgba(32, 41, 78, 0.7);
+        border-radius: 8px;
+        color: #00FFD1;
+        transition: all 0.3s ease;
     }
+    
     .stTabs [data-baseweb="tab"]:hover {
-        background-color: #e5e7eb;
+        background: rgba(37, 65, 83, 0.9);
+        transform: translateY(-2px);
     }
+    
     .stTabs [aria-selected="true"] {
-        background-color: #1E3A8A !important;
-        color: white !important;
+        background: linear-gradient(135deg, #00FFD1 0%, #00A3FF 100%) !important;
+        color: #1A1F38 !important;
+    }
+    
+    /* DataFrame styling */
+    .dataframe {
+        background: rgba(26, 31, 56, 0.7);
+        backdrop-filter: blur(10px);
+        border-radius: 10px;
+        border: 1px solid rgba(0, 255, 209, 0.1);
+    }
+    
+    /* Input fields styling */
+    .stTextInput > div > div {
+        background: rgba(26, 31, 56, 0.7);
+        border: 1px solid rgba(0, 255, 209, 0.3);
+        border-radius: 8px;
+    }
+    
+    .stTextArea > div > div {
+        background: rgba(26, 31, 56, 0.7);
+        border: 1px solid rgba(0, 255, 209, 0.3);
+        border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
-
 @st.cache_resource(show_spinner=False)
 def load_nlp_model():
     try:
@@ -152,328 +201,238 @@ def load_nlp_model():
 class ProfileExtractor:
     def __init__(self):
         self.nlp = load_nlp_model()
+        # Extended invalid terms
         self.invalid_terms = {
-            'navratri', 'eid', 'diwali', 'asia', 'germany', 'mumbai', 'delhi',
-            'digi yatra', 'free fire', 'wordle', 'top stocks', 'fire max',
-            'breaking news', 'latest news', 'read more', 'share market'
+            'navratri', 'eid', 'diwali', 'christmas', 'new year',
+            'asia', 'germany', 'mumbai', 'delhi', 'bangalore', 'india', 'china',
+            'digi yatra', 'free fire', 'wordle', 'android', 'ios',
+            'top stocks', 'fire max', 'breaking news', 'latest news',
+            'read more', 'share market', 'stock market', 'monday', 'tuesday',
+            'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
+        }
+        
+        self.name_prefixes = {
+            'mr', 'mrs', 'ms', 'dr', 'prof', 'sir', 'er', 'eng',
+            'advocate', 'justice', 'honorable', 'shri', 'smt'
+        }
+        
+        self.professional_contexts = {
+            'ceo', 'chief', 'president', 'director', 'head', 'vp', 'vice president',
+            'founder', 'co-founder', 'chairman', 'managing director', 'md', 'cto',
+            'engineer', 'architect', 'leader', 'executive', 'manager', 'principal',
+            'partner', 'associate', 'advisor', 'consultant', 'strategist', 'analyst',
+            'lead', 'head', 'specialist', 'expert', 'professional'
         }
 
     def get_clean_text_from_url(self, url):
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
-        }
-        
         try:
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-
-            response = requests.get(
-                url, 
-                headers=headers, 
-                timeout=15,
-                verify=False
-            )
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.get(url, headers=headers, verify=False, timeout=15)
             response.raise_for_status()
-            
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove unwanted elements
-            for element in soup(['script', 'style', 'nav', 'footer', 'iframe', 'header', 'aside', 'meta', 'noscript']):
+            for element in soup(['script', 'style', 'aside', 'nav', 'footer', 'iframe', 'header']):
                 element.decompose()
             
-            # Remove ads and promotional content
-            for element in soup.find_all(class_=re.compile(r'ad|promo|banner|sidebar|cookie|popup|newsletter|subscription', re.I)):
-                element.decompose()
+            # Get text content
+            text = ' '.join([p.get_text() for p in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
             
-            text = ""
-            
-            # Method 1: Look for article content
-            article = soup.find('article') or soup.find(class_=re.compile(r'article|post|content|story', re.I))
-            if article:
-                text = article.get_text(separator=' ', strip=True)
-            
-            # Method 2: Look for main content
-            if not text:
-                main_content = soup.find(['main', 'div'], class_=re.compile(r'content|article|post|story|body', re.I))
-                if main_content:
-                    text = main_content.get_text(separator=' ', strip=True)
-            
-            # Method 3: Look for paragraphs
-            if not text:
-                paragraphs = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
-                text = ' '.join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
-            
-            # Clean the text
+            # Clean text
             text = re.sub(r'\s+', ' ', text)
-            text = re.sub(r'[^\w\s\'-]', ' ', text)
-            text = ' '.join(word for word in text.split() if len(word) > 1)
-            
-            if not text:
-                st.warning("No readable content found in the webpage")
-                return ""
-                
+            text = re.sub(r'[^\w\s.,!?-]', '', text)
             return text.strip()
-            
         except Exception as e:
-            st.error(f"Error fetching URL: {str(e)}")
             raise Exception(f"Error fetching URL: {str(e)}")
 
     def is_valid_name(self, name):
-        if not name or len(name) < 5:
+        if not name or len(name) < 2 or len(name) > 40:
             return False
-            
+        
+        name_lower = name.lower()
+        
+        if any(term in name_lower for term in self.invalid_terms):
+            return False
+        
+        has_valid_context = any(prefix in name_lower for prefix in self.name_prefixes) or \
+                          any(context in name_lower for context in self.professional_contexts)
+        
         words = name.split()
         if len(words) < 2:
             return False
-            
-        caps = sum(1 for w in words if w and w[0].isupper())
-        if caps < 2:
+        
+        if not all(word[0].isupper() for word in words if word):
             return False
-            
-        if name.lower() in self.invalid_terms:
+        
+        if re.search(r'[0-9@#$%^&*()_+=\[\]{};:"|<>?]', name):
             return False
-            
-        if re.search(r'[^a-zA-Z\s\'-]', name):
-            return False
-            
-        # Additional validation for common false positives
-        if re.search(r'\b(Private|Limited|Ltd|Inc|Corp|AG|News|Update)\b', name):
-            return False
-            
+        
         return True
 
     def extract_designation(self, text):
-        patterns = [
-            r"(?:is|was|as)\s+(?:the\s+)?(?:new\s+)?([A-Z][a-z]+\s+)?(?:CEO|Chief|President|Director|Head|VP|Vice President|Founder|Executive)",
-            r"(?:Senior|Global|Regional)?\s*(?:Director|Manager|Lead|Head|Chief|Officer)\s+(?:of|for|at)\s+[A-Z][A-Za-z\s]+",
-            r"(?:CEO|CTO|CIO|CFO|COO|CHRO|CMO)\s+(?:and|&)?\s*(?:Co-founder|Founder|Director|President)?",
-            r"(?:Managing|Executive|General)\s+(?:Director|Partner|Manager|Principal)",
-            r"(?:Technical|Technology|Product|Program|Project)\s+(?:Director|Manager|Lead|Head|Architect)"
+        designation_patterns = [
+            r'(?i)(Chief\s+[A-Za-z]+\s+Officer|CEO|CTO|CFO|COO|CIO)',
+            r'(?i)(Managing\s+Director|Director|MD)',
+            r'(?i)(Vice\s+President|VP|President)',
+            r'(?i)(Founder|Co-founder|Chairman)',
+            r'(?i)(Head\s+of\s+[A-Za-z\s]+)',
+            r'(?i)(Senior\s+[A-Za-z]+\s+Manager|Manager)',
+            r'(?i)(Lead\s+[A-Za-z]+|Team\s+Lead)',
         ]
         
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                return match.group(0).strip()
-        return ""
+        designations = []
+        for pattern in designation_patterns:
+            matches = re.finditer(pattern, text)
+            for match in matches:
+                designation = match.group().strip()
+                if designation and len(designation) > 2:
+                    designations.append(designation)
+        
+        return list(set(designations))
 
     def extract_company(self, text):
-        patterns = [
-            r"(?:at|of|for|with)\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
-            r"joined\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
-            r"([A-Z][A-Za-z0-9\s&]+?)(?:'s|')\s+(?:CEO|Chief|President|Director)",
-            r"(?:works|working)\s+(?:at|for|with)\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)"
+        company_patterns = [
+            r'(?i)(?:at|with|for|in)\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP)?)',
+            r'(?i)([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP))',
         ]
         
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                company = match.group(1).strip()
-                if (company and 
-                    company not in self.invalid_terms and 
-                    len(company) > 2 and 
-                    not re.search(r'\d', company)):
-                    return company
-        return ""
+        companies = []
+        for pattern in company_patterns:
+            matches = re.finditer(pattern, text)
+            for match in matches:
+                company = match.group(1).strip() if len(match.groups()) > 0 else match.group().strip()
+                if company and len(company) > 2:
+                    companies.append(company)
+        
+        return list(set(companies))
 
     def extract_profiles(self, text):
         doc = self.nlp(text)
-        profiles = {}
+        profiles = []
         
         for ent in doc.ents:
             if ent.label_ == "PERSON":
                 name = ent.text.strip()
                 
                 if self.is_valid_name(name):
-                    start = max(0, ent.start_char - 200)
-                    end = min(len(text), ent.end_char + 200)
+                    start = max(0, ent.start_char - 100)
+                    end = min(len(text), ent.end_char + 100)
                     context = text[start:end]
                     
-                    designation = self.extract_designation(context)
-                    company = self.extract_company(context)
+                    designations = self.extract_designation(context)
+                    companies = self.extract_company(context)
                     
-                    if designation or company:
-                        if name not in profiles:
-                            profiles[name] = {
-                                "Name": name,
-                                "Designation": designation,
-                                "Company": company,
-                                "LinkedIn Search": ""
-                            }
-                        else:
-                            if designation and not profiles[name]["Designation"]:
-                                profiles[name]["Designation"] = designation
-                            if company and not profiles[name]["Company"]:
-                                profiles[name]["Company"] = company
+                    linkedin_url = f"https://www.linkedin.com/search/results/people/?keywords={name.replace(' ', '%20')}"
+                    
+                    profile = {
+                        "name": name,
+                        "designations": designations,
+                        "companies": companies,
+                        "linkedin_search": linkedin_url
+                    }
+                    
+                    profiles.append(profile)
         
-        results = []
-        for name, profile in profiles.items():
-            search_terms = [name]
-            if profile["Company"]:
-                search_terms.append(profile["Company"])
-            
-            profile["LinkedIn Search"] = f"https://www.google.com/search?q=LinkedIn+" + "+".join(term.replace(" ", "+") for term in search_terms)
-            results.append(profile)
-        
-        return results
-
-def process_url(url):
-    if not url:
-        st.warning("⚠️ Please enter a URL to analyze.")
-        return
-        
-    try:
-        with st.spinner("🔍 Analyzing article..."):
-            extractor = ProfileExtractor()
-            text = extractor.get_clean_text_from_url(url)
-            if text:
-                display_results(extractor, text)
-            else:
-                st.warning("📭 No readable content found in the article.")
-    except Exception as e:
-        st.error(f"❌ Error processing article: {str(e)}")
-
-def process_text(text):
-    if not text:
-        st.warning("⚠️ Please paste some article content to analyze.")
-        return
-        
-    try:
-        with st.spinner("🔍 Analyzing text..."):
-            extractor = ProfileExtractor()
-            display_results(extractor, text)
-    except Exception as e:
-        st.error(f"❌ Error processing text: {str(e)}")
-
-def display_results(extractor, text):
-    with st.expander("📝 View processed content"):
-        st.text(text[:500] + "...")
-        
-    profiles = extractor.extract_profiles(text)
-    
-    if profiles:
-        df = pd.DataFrame(profiles)
-        
-        st.markdown("### 📊 Opportunity Overview")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-icon">🎯</div>
-                    <div class="metric-title">Total Prospects</div>
-                    <div class="metric-value">{len(df)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        with col2:
-            complete = len(df[df["Designation"].astype(bool) & df["Company"].astype(bool)])
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-icon">✅</div>
-                    <div class="metric-title">Complete Profiles</div>
-                    <div class="metric-value">{complete}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        with col3:
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-icon">🏢</div>
-                    <div class="metric-title">Companies</div>
-                    <div class="metric-value">{df['Company'].nunique()}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        st.markdown("### 🎯 Identified Prospects")
-        st.dataframe(
-            df,
-            column_config={
-                "Name": st.column_config.TextColumn("Name", width="medium"),
-                "Designation": st.column_config.TextColumn("Designation", width="medium"),
-                "Company": st.column_config.TextColumn("Company", width="medium"),
-                "LinkedIn Search": st.column_config.LinkColumn("LinkedIn Search")
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-        
-        st.markdown("### 📥 Export Options")
-        col1, col2 = st.columns(2)
-        with col1:
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "📊 Download CSV",
-                csv,
-                "newsnex_prospects.csv",
-                "text/csv",
-                use_container_width=True
-            )
-        with col2:
-            json_str = df.to_json(orient="records", indent=2)
-            st.download_button(
-                "📋 Download JSON",
-                json_str,
-                "newsnex_prospects.json",
-                "application/json",
-                use_container_width=True
-            )
-    else:
-        st.info("ℹ️ No business prospects found in this content.")
+        return profiles
 
 def main():
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        st.markdown('<p class="main-title">🎯 NewsNex</p>', unsafe_allow_html=True)
-        st.markdown('<p class="tagline">Where News Sparks the Next Deal</p>', unsafe_allow_html=True)
-        st.markdown('<p class="sub-tagline">🧠 Smarter Prospecting Starts with News</p>', unsafe_allow_html=True)
-        
-        # URL input and text area in tabs
-        tab1, tab2 = st.tabs(["📰 URL Input", "📝 Text Input"])
-        
-        with tab1:
-            url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
-            if st.button("🔍 Analyze URL", use_container_width=True):
-                process_url(url)
-                
-        with tab2:
-            article_text = st.text_area(
-                "Or paste article text directly:",
-                height=200,
-                placeholder="Paste the article content here..."
-            )
-            if st.button("🔍 Analyze Text", use_container_width=True):
-                process_text(article_text)
-    
-    with col2:
-        # Simplified globe visualization
-        st.markdown("""
-        <div class="globe-wrapper">
-            <div class="globe-dots"></div>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown('<h1 class="main-title">NewsNex</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="tagline">From News to Next Opportunities</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-tagline">Extract professional profiles from news articles</p>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown(
-        """
-        <div style='text-align: center'>
-            Made with ❤️ by NewsNex | Transform News into Opportunities
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+    tab1, tab2 = st.tabs(["📰 URL Input", "📝 Text Input"])
+
+    extractor = ProfileExtractor()
+    
+    with tab1:
+        url = st.text_input("Enter news article URL:")
+        if st.button("Extract from URL", key="url_button"):
+            if url:
+                try:
+                    with st.spinner("🔍 Analyzing article..."):
+                        text = extractor.get_clean_text_from_url(url)
+                        profiles = extractor.extract_profiles(text)
+                        display_results(extractor, text, profiles)
+                except Exception as e:
+                    st.error(f"⚠️ Error: {str(e)}")
+            else:
+                st.warning("⚠️ Please enter a URL")
+
+    with tab2:
+        text_input = st.text_area("Paste article text:", height=200)
+        if st.button("Extract from Text", key="text_button"):
+            if text_input:
+                with st.spinner("🔍 Processing text..."):
+                    profiles = extractor.extract_profiles(text_input)
+                    display_results(extractor, text_input, profiles)
+            else:
+                st.warning("⚠️ Please enter some text")
+
+def display_results(extractor, text, profiles):
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">📊 Total Prospects</div>
+                <div class="metric-value">{len(profiles)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    complete_profiles = sum(1 for p in profiles if p['designations'] and p['companies'])
+    with col2:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">✨ Complete Profiles</div>
+                <div class="metric-value">{complete_profiles}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    unique_companies = len(set(company for p in profiles for company in p['companies']))
+    with col3:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">🏢 Unique Companies</div>
+                <div class="metric-value">{unique_companies}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    if profiles:
+        df = pd.json_normalize(profiles)
+        
+        st.markdown("### 📋 Extracted Profiles")
+        st.dataframe(df)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv,
+                file_name="profiles.csv",
+                mime="text/csv"
+            )
+        with col2:
+            json_str = json.dumps(profiles, indent=2)
+            st.download_button(
+                label="📥 Download JSON",
+                data=json_str,
+                file_name="profiles.json",
+                mime="application/json"
+            )
+    else:
+        st.info("🔍 No profiles found in the provided content.")
 
 if __name__ == "__main__":
     main()
