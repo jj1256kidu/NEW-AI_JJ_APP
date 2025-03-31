@@ -21,9 +21,214 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# [Previous CSS styles remain unchanged]
-# ... (Keep all the CSS styling from the previous version)
-
+# Custom CSS with professional styling
+st.markdown("""
+<style>
+    /* Modern Background with Dynamic Gradient */
+    .stApp {
+        background: linear-gradient(
+            135deg,
+            #0a192f 0%,
+            #112240 50%,
+            #1a365d 100%
+        );
+        background-attachment: fixed;
+        position: relative;
+        overflow-x: hidden;
+    }
+    
+    /* Animated Gradient Overlay */
+    .stApp::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: 
+            radial-gradient(circle at 20% 30%, rgba(64, 196, 255, 0.08) 0%, transparent 50%),
+            radial-gradient(circle at 80% 70%, rgba(128, 0, 255, 0.08) 0%, transparent 50%),
+            radial-gradient(circle at 50% 50%, rgba(0, 255, 209, 0.08) 0%, transparent 50%);
+        animation: aurora 20s ease infinite;
+        z-index: 0;
+    }
+    
+    @keyframes aurora {
+        0% { transform: rotate(0deg) scale(1); }
+        50% { transform: rotate(180deg) scale(1.2); }
+        100% { transform: rotate(360deg) scale(1); }
+    }
+    
+    /* Content Layer */
+    .stApp > * {
+        position: relative;
+        z-index: 1;
+    }
+    
+    /* Branding and Typography */
+    .main-title {
+        font-size: 3.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #40c4ff 0%, #00ffd1 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        margin: 2rem 0 1rem;
+        font-family: 'Inter', sans-serif;
+        letter-spacing: -0.02em;
+    }
+    
+    .tagline {
+        font-size: 1.8rem;
+        color: #40c4ff;
+        text-align: center;
+        margin-bottom: 0.5rem;
+        font-family: 'Inter', sans-serif;
+        font-weight: 600;
+        text-shadow: 0 0 20px rgba(64, 196, 255, 0.3);
+    }
+    
+    .sub-tagline {
+        font-size: 1.4rem;
+        color: #00ffd1;
+        text-align: center;
+        margin-bottom: 2rem;
+        font-family: 'Inter', sans-serif;
+        font-style: italic;
+        font-weight: 500;
+        text-shadow: 0 0 20px rgba(0, 255, 209, 0.3);
+    }
+    
+    /* Modern Card Design */
+    .metric-card {
+        background: rgba(17, 34, 64, 0.6);
+        backdrop-filter: blur(12px);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(64, 196, 255, 0.1);
+        box-shadow: 0 8px 32px rgba(0, 255, 209, 0.1);
+        transition: all 0.3s ease;
+        margin: 1rem 0;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(64, 196, 255, 0.3);
+        box-shadow: 0 12px 40px rgba(0, 255, 209, 0.2);
+    }
+    
+    .metric-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #40c4ff;
+        margin-bottom: 0.5rem;
+        text-align: center;
+    }
+    
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #ffffff;
+        text-align: center;
+        text-shadow: 0 0 20px rgba(64, 196, 255, 0.3);
+    }
+    
+    /* Button Styling */
+    .stButton > button {
+        background: linear-gradient(135deg, #40c4ff 0%, #00ffd1 100%);
+        color: #0a192f;
+        font-weight: 600;
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        width: 100%;
+        font-size: 1.1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(64, 196, 255, 0.3);
+    }
+    
+    /* Tab Design */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background: rgba(17, 34, 64, 0.6);
+        padding: 1rem;
+        border-radius: 12px;
+        backdrop-filter: blur(12px);
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: rgba(10, 25, 47, 0.7);
+        border-radius: 8px;
+        color: #40c4ff;
+        padding: 0.75rem 2rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        background: rgba(26, 54, 93, 0.9);
+        transform: translateY(-2px);
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #40c4ff 0%, #00ffd1 100%) !important;
+        color: #0a192f !important;
+        font-weight: 600;
+    }
+    
+    /* Input Fields */
+    .stTextInput > div > div,
+    .stTextArea > div > div {
+        background: rgba(17, 34, 64, 0.6);
+        border: 1px solid rgba(64, 196, 255, 0.2);
+        border-radius: 8px;
+        color: white;
+        transition: all 0.3s ease;
+    }
+    
+    .stTextInput > div > div:focus-within,
+    .stTextArea > div > div:focus-within {
+        border-color: #40c4ff;
+        box-shadow: 0 0 15px rgba(64, 196, 255, 0.2);
+    }
+    
+    /* DataFrame Styling */
+    .dataframe {
+        background: rgba(17, 34, 64, 0.6);
+        backdrop-filter: blur(12px);
+        border-radius: 12px;
+        border: 1px solid rgba(64, 196, 255, 0.1);
+        color: white;
+    }
+    
+    /* Footer */
+    .footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 1rem;
+        background: rgba(10, 25, 47, 0.9);
+        backdrop-filter: blur(12px);
+        border-top: 1px solid rgba(64, 196, 255, 0.1);
+        text-align: center;
+        color: #40c4ff;
+        font-size: 1.1rem;
+        z-index: 1000;
+    }
+    
+    /* Loading Spinner */
+    .stSpinner > div {
+        border-color: #40c4ff #40c4ff transparent transparent;
+    }
+</style>
+""", unsafe_allow_html=True)
 @st.cache_resource(show_spinner=False)
 def load_nlp_model():
     try:
@@ -134,20 +339,9 @@ class ProfileExtractor:
             
             # Events/Festivals
             'diwali', 'christmas', 'new year', 'festival', 'event',
-            'conference', 'summit', 'meeting', 'webinar', 'seminar',
-            
-            # Products/Services
-            'product', 'service', 'solution', 'platform', 'system',
-            'software', 'hardware', 'device', 'application', 'app'
+            'conference', 'summit', 'meeting', 'webinar', 'seminar'
         }
-        
-        # Company suffixes for validation
-        self.company_suffixes = {
-            'ltd', 'limited', 'inc', 'incorporated', 'corp', 'corporation',
-            'llc', 'llp', 'company', 'co', 'group', 'holdings', 'plc',
-            'technologies', 'technology', 'solutions', 'services',
-            'ventures', 'capital', 'partners', 'industries', 'enterprises'
-        }
+
     def clean_name(self, name):
         """Clean and validate person name."""
         if not name or len(name) < 3 or len(name) > 40:
@@ -191,32 +385,6 @@ class ProfileExtractor:
                 return value
                 
         return designation.title()
-
-    def clean_company(self, company):
-        """Clean and validate company name."""
-        if not company or len(company) < 2:
-            return None
-            
-        company = company.strip()
-        
-        # Remove common article prefixes
-        company = re.sub(r'^(at|with|for|in|of)\s+', '', company, flags=re.IGNORECASE)
-        
-        # Check for company suffixes
-        has_suffix = any(suffix.lower() in company.lower() for suffix in self.company_suffixes)
-        
-        # Must start with capital letter
-        if not company[0].isupper():
-            return None
-            
-        # Remove any quoted text
-        company = re.sub(r'".*?"', '', company)
-        company = re.sub(r"'.*?'", '', company)
-        
-        # Clean up extra spaces
-        company = ' '.join(company.split())
-        
-        return company if has_suffix or len(company.split()) > 1 else None
 
     def get_clean_text_from_url(self, url):
         """Extract and clean text from URL."""
@@ -300,16 +468,27 @@ class ProfileExtractor:
                 context = text[start:end].lower()
                 
                 # Extract designations and companies
-                raw_designations = self.extract_designations(context)
-                raw_companies = self.extract_companies(context)
+                designations = []
+                companies = []
                 
-                # Clean and standardize designations
-                designations = [self.standardize_designation(d) for d in raw_designations]
-                designations = [d for d in designations if d]
+                # Look for designations
+                for key in self.designation_mapping:
+                    if key in context:
+                        designations.append(self.designation_mapping[key])
                 
-                # Clean companies
-                companies = [self.clean_company(c) for c in raw_companies]
-                companies = [c for c in companies if c]
+                # Look for company patterns
+                company_patterns = [
+                    r'(?:at|with|for|in|of)\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP)?)',
+                    r'([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP))',
+                    r'(?:joined|works\s+at|employed\s+by)\s+([A-Z][A-Za-z0-9\s&]+)'
+                ]
+                
+                for pattern in company_patterns:
+                    matches = re.finditer(pattern, text[start:end])
+                    for match in matches:
+                        company = match.group(1).strip() if len(match.groups()) > 0 else match.group().strip()
+                        if company and len(company) > 2:
+                            companies.append(company)
                 
                 # Only include profiles with at least one designation or company
                 if designations or companies:
@@ -327,52 +506,136 @@ class ProfileExtractor:
         
         return profiles
 
-    def extract_designations(self, text):
-        """Extract designations from text."""
-        designations = []
-        
-        # Use regex patterns for designation extraction
-        patterns = [
-            r'(?i)(Chief\s+[A-Za-z]+\s+Officer|CEO|CTO|CFO|COO|CIO|CMO|CPO)',
-            r'(?i)(Managing\s+Director|Director|MD|Board\s+Director)',
-            r'(?i)(Vice\s+President|President|VP|SVP|EVP)',
-            r'(?i)(Founder|Co-founder|Chairman)',
-            r'(?i)(Head\s+of\s+[A-Za-z\s]+)',
-            r'(?i)(Senior\s+[A-Za-z]+\s+Manager|Manager)',
-            r'(?i)(Lead\s+[A-Za-z]+|Team\s+Lead)',
-            r'(?i)(Senior\s+[A-Za-z]+|Principal\s+[A-Za-z]+)'
-        ]
-        
-        for pattern in patterns:
-            matches = re.finditer(pattern, text)
-            for match in matches:
-                designation = match.group().strip()
-                if designation:
-                    designations.append(designation)
-        
-        return list(set(designations))
+def main():
+    st.markdown('<h1 class="main-title">🧠 NewsNex 📰</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="tagline">Smarter Prospecting Starts with News ⚡</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-tagline">Where News Sparks the Next Deal 🎯</p>', unsafe_allow_html=True)
 
-    def extract_companies(self, text):
-        """Extract company names from text."""
-        companies = []
-        
-        patterns = [
-            r'(?i)(?:at|with|for|in|of)\s+([A-Z][A-Za-z0-9\s&]+(?:' + '|'.join(self.company_suffixes) + '))',
-            r'(?i)([A-Z][A-Za-z0-9\s&]+(?:' + '|'.join(self.company_suffixes) + '))',
-            r'(?i)(?:joined|works\s+at|employed\s+by)\s+([A-Z][A-Za-z0-9\s&]+)'
-        ]
-        
-        for pattern in patterns:
-            matches = re.finditer(pattern, text)
-            for match in matches:
-                company = match.group(1).strip() if len(match.groups()) > 0 else match.group().strip()
-                if company:
-                    companies.append(company)
-        
-        return list(set(companies))
+    tab1, tab2 = st.tabs(["📰 URL Analysis", "📝 Text Analysis"])
 
-# [Previous main() function and display_results() function remain unchanged]
-# ... (Keep the main() and display_results() functions from the previous version)
+    extractor = ProfileExtractor()
+    
+    with tab1:
+        url = st.text_input("Enter news article URL:", placeholder="https://example.com/article")
+        if st.button("Extract from URL", key="url_button"):
+            if url:
+                try:
+                    with st.spinner("🔍 Analyzing article..."):
+                        text = extractor.get_clean_text_from_url(url)
+                        st.success(f"✅ Successfully retrieved article content ({len(text)} characters)")
+                        
+                        profiles = extractor.extract_profiles(text)
+                        if profiles:
+                            display_results(profiles)
+                        else:
+                            st.warning("No profiles found in the article. Try:")
+                            st.info("1. Checking if the URL is accessible")
+                            st.info("2. Pasting the article text directly in the Text Analysis tab")
+                            st.info("3. Verifying that the article contains professional profiles")
+                except Exception as e:
+                    st.error(f"⚠️ Error: {str(e)}")
+                    st.info("💡 Tip: Try pasting the article text directly in the Text Analysis tab")
+            else:
+                st.warning("⚠️ Please enter a URL")
+
+    with tab2:
+        text_input = st.text_area("Paste article text:", height=200,
+                                 placeholder="Paste the article content here...")
+        if st.button("Extract from Text", key="text_button"):
+            if text_input:
+                with st.spinner("🔍 Processing text..."):
+                    profiles = extractor.extract_profiles(text_input)
+                    if profiles:
+                        display_results(profiles)
+                    else:
+                        st.warning("No profiles found in the text. Please ensure:")
+                        st.info("1. The text contains professional profiles")
+                        st.info("2. Names are mentioned with designations or companies")
+            else:
+                st.warning("⚠️ Please enter some text")
+
+def display_results(profiles):
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">📊 Total Prospects</div>
+                <div class="metric-value">{len(profiles)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    complete_profiles = sum(1 for p in profiles if p['designations'] and p['companies'])
+    with col2:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">✨ Complete Profiles</div>
+                <div class="metric-value">{complete_profiles}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    unique_companies = len(set(company for p in profiles for company in p['companies']))
+    with col3:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-title">🏢 Unique Companies</div>
+                <div class="metric-value">{unique_companies}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    if profiles:
+        st.markdown("### 📋 Extracted Profiles")
+        
+        # Create a clean DataFrame
+        df = pd.json_normalize(profiles)
+        
+        # Rename columns for better display
+        if not df.empty:
+            df.columns = [col.replace('.', ' ').title() for col in df.columns]
+        
+        # Display the DataFrame with custom styling
+        st.dataframe(
+            df,
+            use_container_width=True,
+            height=400
+        )
+        
+        # Download buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv,
+                file_name=f"profiles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+        with col2:
+            json_str = json.dumps(profiles, indent=2)
+            st.download_button(
+                label="📥 Download JSON",
+                data=json_str,
+                file_name=f"profiles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json"
+            )
+
+    st.markdown(
+        """
+        <div class='footer'>
+            Made with ❤️ by NewsNex | Transform News into Opportunities
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
