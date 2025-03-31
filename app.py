@@ -26,7 +26,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS and JavaScript for styling and 3D globe
+# Custom CSS for styling
 st.markdown("""
 <style>
     .main-title {
@@ -38,12 +38,13 @@ st.markdown("""
     .tagline {
         font-size: 1.2rem;
         color: #4B5563;
-        margin-bottom: 2rem;
+        margin-bottom: 0.5rem;
     }
     .sub-tagline {
         font-size: 1.1rem;
         color: #6B7280;
         font-style: italic;
+        margin-bottom: 1rem;
     }
     .stButton > button {
         background-color: #1E3A8A;
@@ -78,30 +79,32 @@ st.markdown("""
         font-size: 1.5rem;
         margin-bottom: 0.5rem;
     }
-    #globe-container {
-        width: 100%;
-        height: 300px;
-        margin: 20px 0;
-        position: relative;
-        overflow: hidden;
-        border-radius: 10px;
+    .globe-wrapper {
         background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        height: 300px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 20px;
     }
-    #globe-loading {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        color: white;
-        font-size: 1.2rem;
-        z-index: 1;
+    .globe-dots {
+        width: 200px;
+        height: 200px;
+        background: 
+            radial-gradient(circle at 100px 100px, #ffffff, transparent 20%),
+            radial-gradient(circle at 50px 150px, #ffffff, transparent 15%),
+            radial-gradient(circle at 150px 50px, #ffffff, transparent 15%),
+            radial-gradient(circle at 175px 125px, #ffffff, transparent 10%),
+            radial-gradient(circle at 25px 75px, #ffffff, transparent 10%);
+        border-radius: 50%;
+        animation: rotate 20s linear infinite;
     }
-    .globe-canvas {
-        opacity: 0;
-        transition: opacity 1s ease-in-out;
-    }
-    .globe-canvas.loaded {
-        opacity: 1;
+    @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
     }
     .st-emotion-cache-1y4p8pa {
         max-width: 100rem;
@@ -115,183 +118,28 @@ st.markdown("""
             color: rgba(255, 255, 255, 0.95);
         }
     }
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #f3f4f6;
+        border-radius: 4px;
+        gap: 8px;
+        padding: 8px 16px;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: #e5e7eb;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1E3A8A !important;
+        color: white !important;
+    }
 </style>
-
-<!-- Add Three.js library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-    class ParticleGlobe {
-        constructor(containerId) {
-            this.container = document.getElementById(containerId);
-            if (!this.container) return;
-            
-            this.width = this.container.offsetWidth;
-            this.height = this.container.offsetHeight;
-            this.particleCount = 2500;
-            this.radius = 5;
-            
-            this.init();
-        }
-        
-        init() {
-            // Scene setup
-            this.scene = new THREE.Scene();
-            
-            // Camera setup with better perspective
-            this.camera = new THREE.PerspectiveCamera(60, this.width / this.height, 0.1, 1000);
-            this.camera.position.z = 10;
-            
-            // Renderer setup with antialiasing
-            this.renderer = new THREE.WebGLRenderer({
-                antialias: true,
-                alpha: true
-            });
-            this.renderer.setSize(this.width, this.height);
-            this.renderer.setPixelRatio(window.devicePixelRatio);
-            
-            // Add canvas to container
-            this.container.appendChild(this.renderer.domElement);
-            this.renderer.domElement.classList.add('globe-canvas');
-            
-            // Create particles
-            this.createParticles();
-            
-            // Add lights
-            this.addLights();
-            
-            // Start animation
-            this.animate();
-            
-            // Add interaction
-            this.addInteraction();
-            
-            // Handle resize
-            this.handleResize();
-            
-            // Show canvas when loaded
-            setTimeout(() => {
-                this.renderer.domElement.classList.add('loaded');
-                const loading = document.getElementById('globe-loading');
-                if (loading) loading.style.display = 'none';
-            }, 500);
-        }
-        
-        createParticles() {
-            const particles = new Float32Array(this.particleCount * 3);
-            const colors = new Float32Array(this.particleCount * 3);
-            
-            for (let i = 0; i < this.particleCount; i++) {
-                const i3 = i * 3;
-                const phi = Math.acos(-1 + (2 * i) / this.particleCount);
-                const theta = Math.sqrt(this.particleCount * Math.PI) * phi;
-                
-                // Position
-                particles[i3] = this.radius * Math.cos(theta) * Math.sin(phi);
-                particles[i3 + 1] = this.radius * Math.sin(theta) * Math.sin(phi);
-                particles[i3 + 2] = this.radius * Math.cos(phi);
-                
-                // Color
-                colors[i3] = 0.5 + Math.random() * 0.5;
-                colors[i3 + 1] = 0.5 + Math.random() * 0.5;
-                colors[i3 + 2] = 1.0;
-            }
-            
-            const geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position', new THREE.BufferAttribute(particles, 3));
-            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-            
-            const material = new THREE.PointsMaterial({
-                size: 0.05,
-                vertexColors: true,
-                transparent: true,
-                opacity: 0.8,
-                blending: THREE.AdditiveBlending
-            });
-            
-            this.globe = new THREE.Points(geometry, material);
-            this.scene.add(this.globe);
-        }
-        
-        addLights() {
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
-            this.scene.add(ambientLight);
-            
-            const pointLight = new THREE.PointLight(0x4169e1, 1);
-            pointLight.position.set(10, 10, 10);
-            this.scene.add(pointLight);
-        }
-        
-        animate() {
-            requestAnimationFrame(() => this.animate());
-            
-            if (this.globe) {
-                this.globe.rotation.y += 0.001;
-                this.globe.position.y = Math.sin(Date.now() * 0.001) * 0.1;
-            }
-            
-            this.renderer.render(this.scene, this.camera);
-        }
-        
-        addInteraction() {
-            let isMouseDown = false;
-            let mouseX = 0;
-            let mouseY = 0;
-            
-            this.container.addEventListener('mousedown', (e) => {
-                isMouseDown = true;
-                mouseX = e.clientX;
-                mouseY = e.clientY;
-            });
-            
-            this.container.addEventListener('mousemove', (e) => {
-                if (!isMouseDown) return;
-                
-                const deltaX = e.clientX - mouseX;
-                const deltaY = e.clientY - mouseY;
-                
-                if (this.globe) {
-                    this.globe.rotation.y += deltaX * 0.005;
-                    this.globe.rotation.x += deltaY * 0.005;
-                }
-                
-                mouseX = e.clientX;
-                mouseY = e.clientY;
-            });
-            
-            this.container.addEventListener('mouseup', () => {
-                isMouseDown = false;
-            });
-            
-            this.container.addEventListener('mouseleave', () => {
-                isMouseDown = false;
-            });
-        }
-        
-        handleResize() {
-            window.addEventListener('resize', () => {
-                this.width = this.container.offsetWidth;
-                this.height = this.container.offsetHeight;
-                
-                this.camera.aspect = this.width / this.height;
-                this.camera.updateProjectionMatrix();
-                
-                this.renderer.setSize(this.width, this.height);
-            });
-        }
-    }
-    
-    // Initialize globe when document is ready
-    function initGlobe() {
-        const globe = new ParticleGlobe('globe-container');
-    }
-    
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initGlobe);
-    } else {
-        initGlobe();
-    }
-</script>
 """, unsafe_allow_html=True)
+
 @st.cache_resource(show_spinner=False)
 def load_nlp_model():
     try:
@@ -474,122 +322,148 @@ class ProfileExtractor:
         
         return results
 
+def process_url(url):
+    if not url:
+        st.warning("⚠️ Please enter a URL to analyze.")
+        return
+        
+    try:
+        with st.spinner("🔍 Analyzing article..."):
+            extractor = ProfileExtractor()
+            text = extractor.get_clean_text_from_url(url)
+            if text:
+                display_results(extractor, text)
+            else:
+                st.warning("📭 No readable content found in the article.")
+    except Exception as e:
+        st.error(f"❌ Error processing article: {str(e)}")
+
+def process_text(text):
+    if not text:
+        st.warning("⚠️ Please paste some article content to analyze.")
+        return
+        
+    try:
+        with st.spinner("🔍 Analyzing text..."):
+            extractor = ProfileExtractor()
+            display_results(extractor, text)
+    except Exception as e:
+        st.error(f"❌ Error processing text: {str(e)}")
+
+def display_results(extractor, text):
+    with st.expander("📝 View processed content"):
+        st.text(text[:500] + "...")
+        
+    profiles = extractor.extract_profiles(text)
+    
+    if profiles:
+        df = pd.DataFrame(profiles)
+        
+        st.markdown("### 📊 Opportunity Overview")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-icon">🎯</div>
+                    <div class="metric-title">Total Prospects</div>
+                    <div class="metric-value">{len(df)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        with col2:
+            complete = len(df[df["Designation"].astype(bool) & df["Company"].astype(bool)])
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-icon">✅</div>
+                    <div class="metric-title">Complete Profiles</div>
+                    <div class="metric-value">{complete}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        with col3:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-icon">🏢</div>
+                    <div class="metric-title">Companies</div>
+                    <div class="metric-value">{df['Company'].nunique()}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        st.markdown("### 🎯 Identified Prospects")
+        st.dataframe(
+            df,
+            column_config={
+                "Name": st.column_config.TextColumn("Name", width="medium"),
+                "Designation": st.column_config.TextColumn("Designation", width="medium"),
+                "Company": st.column_config.TextColumn("Company", width="medium"),
+                "LinkedIn Search": st.column_config.LinkColumn("LinkedIn Search")
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+        
+        st.markdown("### 📥 Export Options")
+        col1, col2 = st.columns(2)
+        with col1:
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "📊 Download CSV",
+                csv,
+                "newsnex_prospects.csv",
+                "text/csv",
+                use_container_width=True
+            )
+        with col2:
+            json_str = df.to_json(orient="records", indent=2)
+            st.download_button(
+                "📋 Download JSON",
+                json_str,
+                "newsnex_prospects.json",
+                "application/json",
+                use_container_width=True
+            )
+    else:
+        st.info("ℹ️ No business prospects found in this content.")
+
 def main():
-    # Updated header with new branding
-    st.markdown('<p class="main-title">🎯 NewsNex</p>', unsafe_allow_html=True)
-    st.markdown('<p class="tagline">Where News Sparks the Next Deal</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-tagline">🧠 Smarter Prospecting Starts with News</p>', unsafe_allow_html=True)
-    
-    # Add 3D Globe with loading indicator
-    st.markdown("""
-    <div id="globe-container">
-        <div id="globe-loading">Loading visualization...</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    url = st.text_input("📰 Enter news article URL:", placeholder="https://example.com/article")
-    
-    if st.button("⚡ Extract Opportunities"):
-        if not url:
-            st.warning("⚠️ Please enter a URL to analyze.")
-            return
-            
-        try:
-            with st.spinner("🔍 Analyzing article for business opportunities..."):
-                extractor = ProfileExtractor()
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown('<p class="main-title">🎯 NewsNex</p>', unsafe_allow_html=True)
+        st.markdown('<p class="tagline">Where News Sparks the Next Deal</p>', unsafe_allow_html=True)
+        st.markdown('<p class="sub-tagline">🧠 Smarter Prospecting Starts with News</p>', unsafe_allow_html=True)
+        
+        # URL input and text area in tabs
+        tab1, tab2 = st.tabs(["📰 URL Input", "📝 Text Input"])
+        
+        with tab1:
+            url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
+            if st.button("🔍 Analyze URL", use_container_width=True):
+                process_url(url)
                 
-                text = extractor.get_clean_text_from_url(url)
-                if not text:
-                    st.warning("📭 No readable content found in the article.")
-                    st.write("🔍 Debug: Please check if the URL is accessible and contains article content.")
-                    return
-                
-                with st.expander("📝 View extracted content"):
-                    st.text(text[:500] + "...")
-                    
-                profiles = extractor.extract_profiles(text)
-                
-                if profiles:
-                    df = pd.DataFrame(profiles)
-                    
-                    st.markdown("### 📊 Opportunity Overview")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.markdown(
-                            f"""
-                            <div class="metric-card">
-                                <div class="metric-icon">🎯</div>
-                                <div class="metric-title">Total Prospects</div>
-                                <div class="metric-value">{len(df)}</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                    with col2:
-                        complete = len(df[df["Designation"].astype(bool) & df["Company"].astype(bool)])
-                        st.markdown(
-                            f"""
-                            <div class="metric-card">
-                                <div class="metric-icon">✅</div>
-                                <div class="metric-title">Complete Profiles</div>
-                                <div class="metric-value">{complete}</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                    with col3:
-                        st.markdown(
-                            f"""
-                            <div class="metric-card">
-                                <div class="metric-icon">🏢</div>
-                                <div class="metric-title">Companies</div>
-                                <div class="metric-value">{df['Company'].nunique()}</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                    
-                    st.markdown("### 🎯 Identified Prospects")
-                    st.dataframe(
-                        df,
-                        column_config={
-                            "Name": st.column_config.TextColumn("Name", width="medium"),
-                            "Designation": st.column_config.TextColumn("Designation", width="medium"),
-                            "Company": st.column_config.TextColumn("Company", width="medium"),
-                            "LinkedIn Search": st.column_config.LinkColumn("LinkedIn Search")
-                        },
-                        hide_index=True,
-                        use_container_width=True
-                    )
-                    
-                    st.markdown("### 📥 Export Options")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        csv = df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            "📊 Download CSV",
-                            csv,
-                            "newsnex_prospects.csv",
-                            "text/csv",
-                            use_container_width=True
-                        )
-                    with col2:
-                        json_str = df.to_json(orient="records", indent=2)
-                        st.download_button(
-                            "📋 Download JSON",
-                            json_str,
-                            "newsnex_prospects.json",
-                            "application/json",
-                            use_container_width=True
-                        )
-                else:
-                    st.info("ℹ️ No business prospects found in this article.")
-                    
-        except Exception as e:
-            st.error(f"❌ Error processing article: {str(e)}")
+        with tab2:
+            article_text = st.text_area(
+                "Or paste article text directly:",
+                height=200,
+                placeholder="Paste the article content here..."
+            )
+            if st.button("🔍 Analyze Text", use_container_width=True):
+                process_text(article_text)
+    
+    with col2:
+        # Simplified globe visualization
+        st.markdown("""
+        <div class="globe-wrapper">
+            <div class="globe-dots"></div>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(
