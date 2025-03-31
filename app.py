@@ -500,7 +500,7 @@ def display_results(extractor, text, profiles):
     st.markdown(
         """
         <div class='footer'>
-            Made with ❤️ by NewsNex | Transform News into Opportunities
+            Made with ❤️ by Jobin John - NewsNex | Transform News into Opportunities
         </div>
         """, 
         unsafe_allow_html=True
