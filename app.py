@@ -7,15 +7,14 @@ st.set_page_config(
     layout="wide"
 )
 
-import os
-import sys
-import json
+import spacy
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import re
-import spacy
+from collections import defaultdict
 
+# Load spaCy model
 @st.cache_resource
 def load_model():
     try:
@@ -24,143 +23,137 @@ def load_model():
         st.error(f"Error loading spaCy model: {str(e)}")
         return None
 
-# Load NLP model
 nlp = load_model()
 
 if nlp is None:
     st.error("Failed to load NLP model. Please try refreshing the page.")
     st.stop()
 
-def is_valid_name(name):
-    """Check if a name looks like a real person name"""
-    # Must have at least 2 words
-    if len(name.split()) < 2:
-        return False
-    
-    # Avoid common false positives
-    false_positives = [
-        'new delhi', 'navi mumbai', 'eid mubarak', 'digi yatra', 
-        'artificial intelligence', 'machine learning', 'data science',
-        'supreme court', 'high court', 'united states', 'new york',
-        'san francisco', 'hong kong', 'new jersey', 'wall street'
-    ]
-    
-    if name.lower() in false_positives:
-        return False
-    
-    # Check for common location indicators
-    location_indicators = ['street', 'road', 'avenue', 'boulevard', 'lane', 'drive', 'court', 'city', 'town']
-    if any(indicator in name.lower() for indicator in location_indicators):
-        return False
-    
-    return True
+# Enhanced patterns for better detection
+DESIGNATION_PATTERNS = [
+    r"(?:is|was|as)\s+(?:the\s+)?(?:new\s+)?([A-Z][a-z]+\s+)?({role})",
+    r"({role})\s+(?:of|at|for)\s+([A-Z][a-zA-Z\s]+)",
+    r"([A-Z][a-zA-Z\s]+)'s\s+({role})",
+]
 
-def extract_designation(context):
-    """Extract designation from context"""
-    designation_patterns = [
-        r"(CEO|Chief\s+[A-Za-z]+\s+Officer)",
-        r"(Managing Director|Director|MD)",
-        r"(President|Vice President|VP)",
-        r"(Head\s+of\s+[A-Za-z\s]+)",
-        r"(Senior|Jr\.|Sr\.|Junior|Senior)\s+[A-Za-z]+",
-        r"([A-Za-z]+\s+Manager)",
-        r"(Founder|Co-founder|Executive|Leader|Chairman)",
-        r"(Professor|Doctor|Dr\.|Prof\.)",
-        r"(Engineer|Architect|Analyst|Consultant)",
-        r"(Partner|Associate|Principal)"
-    ]
-    
-    for pattern in designation_patterns:
-        match = re.search(pattern, context, re.IGNORECASE)
-        if match:
-            return match.group(0)
-    return "Unknown"
+ROLES = [
+    "CEO", "CTO", "CFO", "COO", "President", "Vice President", "VP", "Director",
+    "Managing Director", "Manager", "Head", "Chief", "Leader", "Founder",
+    "Co-founder", "Executive", "Engineer", "Developer", "Architect", "Lead",
+    "Principal", "Partner", "Associate", "Analyst", "Consultant", "Advisor"
+]
 
-def clean_company_name(name):
-    """Clean and validate company name"""
-    if not name or name.lower() in ['unknown', 'none', 'na', 'n/a']:
-        return "Unknown"
-    
-    # Remove common suffixes
-    suffixes = [' ltd', ' limited', ' inc', ' llc', ' corp', ' corporation']
-    cleaned = name
-    for suffix in suffixes:
-        cleaned = re.sub(f"{suffix}$", "", cleaned, flags=re.IGNORECASE)
-    
-    return cleaned.strip()
-
-def extract_quote(text, name, window=200):
-    """Extract quote around person mention"""
-    quotes = []
-    name_pos = text.lower().find(name.lower())
-    
-    if name_pos != -1:
-        start = max(0, name_pos - window)
-        end = min(len(text), name_pos + window)
-        context = text[start:end]
-        
-        # Find quotes in context
-        quote_matches = re.finditer(r'"([^"]+)"', context)
-        for match in quote_matches:
-            quotes.append(match.group(1))
-    
-    return quotes[0] if quotes else "No direct quote found"
-
-def extract_people_insights(text):
-    """Enhanced people extraction using spaCy and rules"""
+def extract_people(text):
+    """Extract real person names using spaCy with enhanced filtering"""
     doc = nlp(text)
-    people_insights = []
-    seen_names = set()
+    people = set()
     
-    # Process each sentence for better context
-    for sent in doc.sents:
-        sent_doc = nlp(sent.text)
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            name = ent.text.strip()
+            # Filter valid names (at least 2 words, no numbers)
+            if len(name.split()) >= 2 and not re.search(r'\d', name):
+                # Avoid common false positives
+                if not any(fp in name.lower() for fp in [
+                    'new delhi', 'mumbai', 'bangalore', 'supreme court',
+                    'high court', 'united states', 'new york', 'san francisco'
+                ]):
+                    people.add(name)
+    
+    return sorted(people)
+
+def find_quotes(name, text):
+    """Find quotes by or about a person"""
+    quotes = []
+    
+    # Direct quotes pattern
+    direct_quote_pattern = rf'"{name}[^"]*"|{name}[^"]*"([^"]+)"'
+    direct_quotes = re.finditer(direct_quote_pattern, text, re.IGNORECASE)
+    
+    for match in direct_quotes:
+        quote = match.group(0).strip('"')
+        if len(quote) > 10:  # Minimum quote length
+            quotes.append(quote)
+    
+    # Indirect quotes pattern
+    indirect_pattern = rf"{name}\s+(?:said|says|stated|mentioned|added|noted|explained|pointed out|highlighted|emphasized)\s+(?:that\s+)?([^.!?]+[.!?])"
+    indirect_quotes = re.finditer(indirect_pattern, text, re.IGNORECASE)
+    
+    for match in indirect_quotes:
+        quote = match.group(1).strip()
+        if len(quote) > 10:
+            quotes.append(quote)
+    
+    return quotes[0] if quotes else "No quote found"
+
+def find_designation(name, text):
+    """Find person's designation and company"""
+    # Initialize result
+    result = {
+        "designation": "Unknown",
+        "company": "Unknown"
+    }
+    
+    # Create combined role pattern
+    roles_pattern = "|".join(ROLES)
+    
+    # Search for designation patterns
+    for pattern in DESIGNATION_PATTERNS:
+        pattern = pattern.format(role=roles_pattern)
+        context_pattern = rf"{name}.{{0,100}}{pattern}|{pattern}.{{0,100}}{name}"
         
-        for ent in sent_doc.ents:
-            if ent.label_ == 'PERSON':
-                name = ent.text.strip()
+        matches = re.finditer(context_pattern, text, re.IGNORECASE)
+        for match in matches:
+            context = match.group(0)
+            
+            # Extract role
+            role_match = re.search(roles_pattern, context, re.IGNORECASE)
+            if role_match:
+                result["designation"] = role_match.group(0)
                 
-                # Validate name
-                if not is_valid_name(name) or name in seen_names:
-                    continue
+                # Try to find company
+                company_pattern = r"(?:at|of|for)\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)"
+                company_match = re.search(company_pattern, context)
+                if company_match:
+                    result["company"] = company_match.group(1).strip()
                 
-                # Get context (+-200 characters)
-                start_idx = max(0, ent.start_char - 200)
-                end_idx = min(len(sent.text), ent.end_char + 200)
-                context = sent.text[start_idx:end_idx]
-                
-                # Extract designation
-                designation = extract_designation(context)
-                
-                # Find organization
-                company = "Unknown"
-                min_distance = float('inf')
-                for org in sent_doc.ents:
-                    if org.label_ == 'ORG':
-                        distance = abs(org.start - ent.start)
-                        if distance < min_distance and distance < 10:
-                            min_distance = distance
-                            company = clean_company_name(org.text)
-                
-                # Extract quote
-                quote = extract_quote(text, name)
-                
-                # Create LinkedIn search URL
-                name_query = name.replace(" ", "+")
-                company_query = company.replace(" ", "+") if company != "Unknown" else ""
-                linkedin_url = f"https://www.google.com/search?q=LinkedIn+{name_query}+{company_query}"
-                
-                # Add to insights
-                people_insights.append({
-                    "Name": name,
-                    "Designation": designation,
-                    "Company": company,
-                    "Quote": quote,
-                    "LinkedIn": linkedin_url
-                })
-                seen_names.add(name)
+                return result
     
-    return people_insights
+    return result
+
+def build_people_table(text):
+    """Build comprehensive people insights table"""
+    names = extract_people(text)
+    data = []
+    
+    for name in names:
+        # Get quotes
+        quote = find_quotes(name, text)
+        
+        # Get designation and company
+        role_info = find_designation(name, text)
+        
+        # Create LinkedIn search URL
+        search_terms = [name]
+        if role_info["company"] != "Unknown":
+            search_terms.append(role_info["company"])
+        if role_info["designation"] != "Unknown":
+            search_terms.append(role_info["designation"])
+        
+        search_url = f"https://www.google.com/search?q=LinkedIn+" + "+".join(term.replace(" ", "+") for term in search_terms)
+        
+        # Build entry
+        entry = {
+            "Name": name,
+            "Designation": role_info["designation"],
+            "Company": role_info["company"],
+            "Quote": quote,
+            "LinkedIn": search_url
+        }
+        
+        data.append(entry)
+    
+    return pd.DataFrame(data)
 
 # Page title and description
 st.title("Link2People - AI People Insights")
@@ -200,24 +193,23 @@ if st.button("Analyze"):
 
             # Analyze content
             with st.spinner("Analyzing people mentions..."):
-                people_insights = extract_people_insights(text)
+                df = build_people_table(text)
 
             # Display results
-            if people_insights:
-                st.success(f"Found {len(people_insights)} verified people mentions!")
+            if not df.empty:
+                st.success(f"Found {len(df)} verified people mentions!")
                 
                 # Display metrics
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("People Found", len(people_insights))
+                    st.metric("People Found", len(df))
                 with col2:
-                    st.metric("With Quotes", len([p for p in people_insights if p["Quote"] != "No direct quote found"]))
+                    st.metric("With Quotes", len(df[df["Quote"] != "No quote found"]))
                 with col3:
-                    st.metric("With Titles", len([p for p in people_insights if p["Designation"] != "Unknown"]))
+                    st.metric("With Roles", len(df[df["Designation"] != "Unknown"]))
                 
                 # Display detailed insights
                 st.subheader("Detailed People Insights")
-                df = pd.DataFrame(people_insights)
                 
                 # Display as interactive table
                 st.dataframe(
@@ -244,7 +236,7 @@ if st.button("Analyze"):
                         mime="text/csv"
                     )
                 with col2:
-                    json_str = json.dumps(people_insights, indent=2)
+                    json_str = df.to_json(orient="records", indent=2)
                     st.download_button(
                         label="Download JSON",
                         data=json_str,
