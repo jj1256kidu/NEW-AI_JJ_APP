@@ -10,28 +10,21 @@ st.set_page_config(
 import subprocess
 import sys
 import os
-import spacy
+
+# Initialize spaCy
+try:
+    import spacy
+    if not spacy.util.is_package("en_core_web_sm"):
+        os.system('python -m spacy download en_core_web_sm')
+except Exception as e:
+    st.error(f"Error initializing spaCy: {str(e)}")
+
+# Rest of your imports
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import re
 from datetime import datetime
-
-# Initialize spaCy
-def setup_spacy():
-    try:
-        import spacy
-        try:
-            nlp = spacy.load('en_core_web_sm')
-        except OSError:
-            st.info("Downloading spaCy model...")
-            os.system('python -m spacy download en_core_web_sm')
-    except Exception as e:
-        st.error(f"Error setting up spaCy: {str(e)}")
-        return None
-
-# Run setup
-setup_spacy()
 
 # Custom CSS for Aurora theme
 aurora_css = """
@@ -104,12 +97,20 @@ aurora_css = """
 </style>
 """
 
-# Load spaCy model
+# Load spaCy model with error handling
 @st.cache_resource
 def load_model():
-    return spacy.load("en_core_web_sm")
+    try:
+        return spacy.load("en_core_web_sm")
+    except Exception as e:
+        st.error(f"Error loading spaCy model: {str(e)}")
+        return None
 
 def extract_info(text, nlp):
+    if nlp is None:
+        st.error("NLP model not loaded properly")
+        return []
+        
     doc = nlp(text)
     results = []
     seen_names = set()
