@@ -227,6 +227,13 @@ st.markdown("""
     .stSpinner > div {
         border-color: #40c4ff #40c4ff transparent transparent;
     }
+    
+    /* Status Messages */
+    .element-container div[data-testid="stImage"] {
+        background: rgba(17, 34, 64, 0.6);
+        border-radius: 8px;
+        padding: 1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -267,90 +274,83 @@ class ProfileExtractor:
             'consultant', 'advisor', 'strategist', 'professional',
             'executive', 'entrepreneur', 'investor', 'principal'
         }
-        
-        # Invalid terms for better accuracy
-        self.invalid_terms = {
-            # Common place names
-            'india', 'china', 'usa', 'uk', 'europe', 'asia', 'africa',
-            'mumbai', 'delhi', 'bangalore', 'hyderabad', 'chennai',
-            'london', 'new york', 'paris', 'tokyo', 'dubai',
-            
-            # Time-related terms
-            'today', 'yesterday', 'tomorrow', 'week', 'month', 'year',
-            'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
-            'january', 'february', 'march', 'april', 'may', 'june',
-            
-            # Common article terms
-            'news', 'latest', 'breaking', 'update', 'report', 'exclusive',
-            'market', 'stock', 'shares', 'price', 'rates', 'article',
-            'read more', 'click here', 'full story'
-        }
 
     def get_clean_text_from_url(self, url):
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            }
-            
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/91.0.864.48 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Safari/605.1.15'
+        ]
+
+        for user_agent in user_agents:
             try:
-                response = self.session.get(url, headers=headers, verify=False, timeout=20)
+                headers = {
+                    'User-Agent': user_agent,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1'
+                }
+
+                response = self.session.get(url, headers=headers, verify=False, timeout=30)
                 response.raise_for_status()
-            except:
-                # Retry with different headers
-                headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15'
-                response = self.session.get(url, headers=headers, verify=False, timeout=20)
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Remove unwanted elements
-            for element in soup(['script', 'style', 'aside', 'nav', 'footer', 'iframe', 'header', 'meta', 'link', 'noscript', 'svg']):
-                element.decompose()
-            
-            # Try multiple methods to get content
-            text = ""
-            
-            # Method 1: Article content
-            article_content = soup.find_all(['article', 'main', '[class*="article"]', '[class*="content"]', '[class*="story"]'])
-            if article_content:
-                text = ' '.join([p.get_text() for p in article_content])
-            
-            # Method 2: Content containers
-            if not text:
-                content_divs = soup.find_all(['div', 'section'], class_=lambda x: x and any(word in str(x).lower() 
-                    for word in ['article', 'content', 'story', 'body', 'text', 'news', 'post']))
-                if content_divs:
-                    text = ' '.join([div.get_text() for div in content_divs])
-            
-            # Method 3: Paragraphs
-            if not text:
-                text = ' '.join([p.get_text() for p in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
-            
-            # Clean text
-            text = re.sub(r'\s+', ' ', text)
-            text = re.sub(r'[^\w\s.,!?-]', '', text)
-            text = text.strip()
-            
-            if not text:
-                raise Exception("No content could be extracted from the URL")
-            
-            return text
-            
-        except Exception as e:
-            raise Exception(f"Error processing URL: {str(e)}")
+                
+                # Try to detect and handle encoding
+                if 'charset' in response.headers.get('content-type', '').lower():
+                    response.encoding = response.apparent_encoding
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Remove unwanted elements
+                for element in soup(['script', 'style', 'nav', 'footer', 'header']):
+                    element.decompose()
+
+                # Try multiple methods to extract text
+                text = ""
+                
+                # Method 1: Article content
+                if not text:
+                    article = soup.find(['article', 'main', '[role="article"]'])
+                    if article:
+                        text = article.get_text()
+
+                # Method 2: Content divs
+                if not text:
+                    content_divs = soup.find_all(['div', 'section'], 
+                        class_=lambda x: x and any(word in str(x).lower() for word in 
+                        ['article', 'content', 'story', 'body', 'text', 'main', 'news']))
+                    if content_divs:
+                        text = ' '.join(div.get_text() for div in content_divs)
+
+                # Method 3: Paragraphs
+                if not text:
+                    paragraphs = soup.find_all('p')
+                    text = ' '.join(p.get_text() for p in paragraphs)
+
+                # Clean text
+                if text:
+                    # Basic cleaning
+                    text = re.sub(r'\s+', ' ', text)
+                    text = re.sub(r'\n+', ' ', text)
+                    text = text.strip()
+                    
+                    # Remove common article elements
+                    text = re.sub(r'Share\s+this\s+article|Follow\s+us|Subscribe|Comments?|Related\s+Articles?', '', text, flags=re.IGNORECASE)
+                    
+                    return text
+
+            except Exception as e:
+                continue
+
+        raise Exception("Could not extract content from URL. Please try pasting the article text directly.")
 
     def extract_profiles(self, text):
         doc = self.nlp(text)
         profiles = []
         seen_names = set()
         
-        # First pass: collect potential profiles
-        potential_profiles = []
-        
+        # First pass: collect potential names with context
         for ent in doc.ents:
             if ent.label_ == "PERSON":
                 name = ent.text.strip()
@@ -364,57 +364,24 @@ class ProfileExtractor:
                 context_lower = context.lower()
                 has_professional_context = any(marker in context_lower for marker in self.professional_markers)
                 
-                if has_professional_context and self.is_valid_name(name):
+                if has_professional_context and name not in seen_names:
                     designations = self.extract_designation(context)
                     companies = self.extract_company(context)
                     
-                    if name not in seen_names:
-                        potential_profiles.append({
+                    if designations or companies:
+                        linkedin_url = f"https://www.linkedin.com/search/results/people/?keywords={name.replace(' ', '%20')}"
+                        
+                        profile = {
                             "name": name,
-                            "context": context,
                             "designations": designations,
-                            "companies": companies
-                        })
+                            "companies": companies,
+                            "linkedin_search": linkedin_url
+                        }
+                        
+                        profiles.append(profile)
                         seen_names.add(name)
         
-        # Second pass: validate and create final profiles
-        for potential in potential_profiles:
-            if potential["designations"] or potential["companies"]:
-                linkedin_url = f"https://www.linkedin.com/search/results/people/?keywords={potential['name'].replace(' ', '%20')}"
-                
-                profile = {
-                    "name": potential["name"],
-                    "designations": potential["designations"],
-                    "companies": potential["companies"],
-                    "linkedin_search": linkedin_url
-                }
-                
-                profiles.append(profile)
-        
         return profiles
-
-    def is_valid_name(self, name):
-        if not name or len(name) < 2 or len(name) > 40:
-            return False
-        
-        name_lower = name.lower()
-        
-        # Check invalid terms
-        if any(term in name_lower for term in self.invalid_terms):
-            return False
-        
-        # Check name format
-        words = name.split()
-        if len(words) < 2:
-            return False
-        
-        if not all(word[0].isupper() for word in words if word):
-            return False
-        
-        if re.search(r'[0-9@#$%^&*()_+=\[\]{};:"|<>?]', name):
-            return False
-        
-        return True
 
     def extract_designation(self, text):
         designation_patterns = [
@@ -472,6 +439,8 @@ def main():
                 try:
                     with st.spinner("🔍 Analyzing article..."):
                         text = extractor.get_clean_text_from_url(url)
+                        st.success(f"✅ Successfully retrieved article content ({len(text)} characters)")
+                        
                         profiles = extractor.extract_profiles(text)
                         if profiles:
                             display_results(profiles)
@@ -487,7 +456,7 @@ def main():
                 st.warning("⚠️ Please enter a URL")
 
     with tab2:
-        text_input = st.text_area("Paste article text:", height=200, 
+        text_input = st.text_area("Paste article text:", height=200,
                                  placeholder="Paste the article content here...")
         if st.button("Extract from Text", key="text_button"):
             if text_input:
