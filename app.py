@@ -47,7 +47,7 @@ if nlp is None:
     st.error("Failed to load NLP model. Please try refreshing the page.")
     st.stop()
 
-# System prompt for GPT-4
+# System prompt for GPT-3.5
 SYSTEM_PROMPT = """You are an intelligent assistant designed to analyze news articles. When provided with raw extracted content from a news URL, your task is to identify all relevant human individuals mentioned in the article and generate structured insights about each of them.
 
 Instructions:
@@ -75,14 +75,14 @@ Respond in JSON format suitable for processing:
 ]
 """
 
-def extract_people_with_gpt4(text):
-    """Extract people information using GPT-4"""
+def extract_people_with_gpt(text):
+    """Extract people information using GPT-3.5"""
     if client is None:
         return None
         
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",  # Using GPT-3.5-turbo
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": text}
@@ -95,7 +95,7 @@ def extract_people_with_gpt4(text):
         content = response.choices[0].message.content
         return json.loads(content)
     except Exception as e:
-        st.error(f"Error processing with GPT-4: {str(e)}")
+        st.error(f"Error processing with GPT-3.5: {str(e)}")
         return None
 
 def extract_people_with_spacy(text, doc):
@@ -142,7 +142,7 @@ st.markdown("Extract detailed insights about people mentioned in any article")
 
 # Add OpenAI API key status indicator
 if "OPENAI_API_KEY" in st.secrets:
-    st.success("OpenAI API key found! Using GPT-4 for enhanced extraction.")
+    st.success("OpenAI API key found! Using GPT-3.5 for enhanced extraction.")
 else:
     st.warning("OpenAI API key not found. Using basic extraction mode.")
 
@@ -176,10 +176,10 @@ if st.button("Analyze"):
 
             # Analyze content
             with st.spinner("Analyzing people mentions..."):
-                # Try GPT-4 first
-                people_insights = extract_people_with_gpt4(text)
+                # Try GPT-3.5 first
+                people_insights = extract_people_with_gpt(text)
                 
-                # Fallback to spaCy if GPT-4 fails
+                # Fallback to spaCy if GPT-3.5 fails
                 if people_insights is None:
                     st.info("Using fallback extraction method...")
                     doc = nlp(text[:1000000])
