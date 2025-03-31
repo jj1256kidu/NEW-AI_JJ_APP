@@ -1,7 +1,14 @@
 import streamlit as st
 
 # Must be the first Streamlit command
-st.set_page_config(page_title="Link2People", page_icon="🔍", layout="wide")
+st.set_page_config(
+    page_title="Link2People",
+    page_icon="🔍",
+    layout="wide",
+    theme={
+        "font": "sans serif"  # Fixed font setting
+    }
+)
 
 import os
 import sys
@@ -20,34 +27,38 @@ def initialize_spacy():
             # If model isn't found, install it using pip
             st.info("Installing spaCy model...")
             try:
-                subprocess.check_call([
-                    sys.executable, 
-                    "-m", 
-                    "pip", 
-                    "install", 
-                    "--no-deps",
-                    "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl"
-                ], stderr=subprocess.PIPE)
+                # Modified installation command
+                subprocess.run([
+                    sys.executable,
+                    "-m",
+                    "spacy",
+                    "download",
+                    "en_core_web_sm"
+                ], check=True, capture_output=True, text=True)
+                
+                return spacy.load('en_core_web_sm')
             except subprocess.CalledProcessError as e:
-                st.error(f"Failed to install spaCy model: {e.stderr.decode()}")
+                st.error(f"Failed to install spaCy model: {e}")
                 return None
             
-            # Reload spacy after installing the model
-            importlib.reload(spacy)
-            return spacy.load('en_core_web_sm')
     except Exception as e:
         st.error(f"Error initializing spaCy: {str(e)}")
         return None
 
-# Import remaining packages
-try:
-    import pandas as pd
-    import requests
-    from bs4 import BeautifulSoup
-    import re
-except ImportError as e:
-    st.error(f"Failed to import required packages: {str(e)}")
+# Rest of your imports
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import re
+
+# Load NLP model
+nlp = initialize_spacy()
+
+if nlp is None:
+    st.error("Failed to load NLP model. Please try refreshing the page.")
     st.stop()
+
+# Rest of your code remains the same...
 
 # Load NLP model
 nlp = initialize_spacy()
