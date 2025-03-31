@@ -1,4 +1,46 @@
-# ... (previous imports remain the same)
+import streamlit as st
+
+# Must be the first Streamlit command
+st.set_page_config(
+    page_title="Link2People - AI People Insights",
+    page_icon="👥",
+    layout="wide"
+)
+
+import spacy
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import re
+
+# Load spaCy model
+@st.cache_resource
+def load_model():
+    try:
+        return spacy.load("en_core_web_sm")
+    except Exception as e:
+        st.error(f"Error loading spaCy model: {str(e)}")
+        return None
+
+nlp = load_model()
+
+if nlp is None:
+    st.error("Failed to load NLP model. Please try refreshing the page.")
+    st.stop()
+
+# Strict filtering rules
+INVALID_TERMS = {
+    # Apps and tools
+    'garena', 'digi yatra', 'crossword', 'wordle', 'instagram', 'facebook',
+    # Locations
+    'navi mumbai', 'new delhi', 'bangalore', 'mumbai', 'kolkata',
+    # Events and festivals
+    'eid mubarak', 'surya grahan', 'diwali', 'christmas',
+    # Ad terms
+    'lifestyle', 'fire', 'deals', 'captivating', 'trending', 'viral',
+    # Entertainment terms
+    'box office', 'movie', 'film', 'song', 'album', 'show'
+}
 
 class PersonExtractor:
     def __init__(self, text: str):
@@ -39,7 +81,7 @@ class PersonExtractor:
             
         return True
         
-    def extract_quote(self, name: str) -> Optional[str]:
+    def extract_quote(self, name: str) -> str:
         """Extract quotes with improved patterns"""
         quote_patterns = [
             # Direct quotes
@@ -64,7 +106,7 @@ class PersonExtractor:
                     return quote
         return None
         
-    def extract_role_info(self, name: str) -> Dict[str, Optional[str]]:
+    def extract_role_info(self, name: str) -> dict:
         """Extract designation and company with improved patterns"""
         result = {"designation": None, "company": None}
         
@@ -107,7 +149,7 @@ class PersonExtractor:
                     
         return result
         
-    def extract_people(self) -> List[Dict]:
+    def extract_people(self) -> list:
         """Extract person information with improved logic"""
         people_info = {}
         
@@ -161,4 +203,107 @@ class PersonExtractor:
         
         return clean_results
 
-# ... (rest of the code remains the same)
+# Page title and description
+st.title("Link2People - AI People Insights")
+st.markdown("Extract detailed insights about people mentioned in any article")
+
+# URL input
+url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
+
+if st.button("Analyze"):
+    if not url:
+        st.warning("Please enter a URL to analyze.")
+    else:
+        try:
+            # Validate URL format
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+
+            # Fetch webpage content
+            with st.spinner("Fetching article content..."):
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124'
+                }
+                response = requests.get(url, headers=headers, timeout=15)
+                response.raise_for_status()
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Remove ads and promotional content
+                for ad in soup.find_all(class_=re.compile(r'ad|sponsored|promotion', re.IGNORECASE)):
+                    ad.decompose()
+                
+                # Extract main content
+                text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'])
+                text = ' '.join([elem.get_text(strip=True) for elem in text_elements])
+
+                if not text.strip():
+                    st.warning("No readable content found in the article.")
+                    st.stop()
+
+            # Process content
+            with st.spinner("Extracting verified people mentions..."):
+                extractor = PersonExtractor(text)
+                results = extractor.extract_people()
+
+            # Display results
+            if results:
+                st.success(f"Found {len(results)} verified people mentions!")
+                
+                # Convert to DataFrame for display
+                df = pd.DataFrame(results)
+                
+                # Display metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("People Found", len(df))
+                with col2:
+                    st.metric("With Quotes", len(df[df["Quote"].notna()]))
+                with col3:
+                    st.metric("With Roles", len(df[df["Designation"].notna()]))
+                
+                # Display detailed insights
+                st.subheader("Detailed People Insights")
+                
+                # Display as interactive table
+                st.dataframe(
+                    df,
+                    column_config={
+                        "Name": st.column_config.TextColumn("Name", width="medium"),
+                        "Designation": st.column_config.TextColumn("Designation", width="medium"),
+                        "Company": st.column_config.TextColumn("Company", width="medium"),
+                        "Quote": st.column_config.TextColumn("Quote", width="large"),
+                        "LinkedIn Search": st.column_config.LinkColumn("LinkedIn Search")
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+                
+                # Export options
+                col1, col2 = st.columns(2)
+                with col1:
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv,
+                        file_name="people_insights.csv",
+                        mime="text/csv"
+                    )
+                with col2:
+                    json_str = df.to_json(orient="records", indent=2)
+                    st.download_button(
+                        label="Download JSON",
+                        data=json_str,
+                        file_name="people_insights.json",
+                        mime="application/json"
+                    )
+            else:
+                st.info("No verified people were found in the article.")
+                
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error fetching the article: {str(e)}")
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
+
+# Footer
+st.markdown("---")
+st.markdown("Made with ❤️ by AI")
