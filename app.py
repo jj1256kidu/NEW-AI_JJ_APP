@@ -12,8 +12,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Must be the first Streamlit command
 st.set_page_config(
-    page_title="Link2People - Professional Profile Extractor",
-    page_icon="🧠",
+    page_title="NewsNex – Clear positioning: from news to next opportunities.",
+    page_icon="🧠 📰 🎯 ⚡",
     layout="wide"
 )
 
