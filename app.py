@@ -2,7 +2,7 @@ import streamlit as st
 
 # Must be the first Streamlit command
 st.set_page_config(
-    page_title="Link2People - AI People Insights",
+    page_title="Link2People - Professional Insights",
     page_icon="👥",
     layout="wide"
 )
@@ -13,7 +13,6 @@ import requests
 from bs4 import BeautifulSoup
 import re
 
-# Load spaCy model
 @st.cache_resource
 def load_model():
     try:
@@ -28,184 +27,153 @@ if nlp is None:
     st.error("Failed to load NLP model. Please try refreshing the page.")
     st.stop()
 
-# Strict filtering rules
-INVALID_TERMS = {
-    # Apps and tools
-    'garena', 'digi yatra', 'crossword', 'wordle', 'instagram', 'facebook',
-    # Locations
-    'navi mumbai', 'new delhi', 'bangalore', 'mumbai', 'kolkata',
-    # Events and festivals
-    'eid mubarak', 'surya grahan', 'diwali', 'christmas',
-    # Ad terms
-    'lifestyle', 'fire', 'deals', 'captivating', 'trending', 'viral',
-    # Entertainment terms
-    'box office', 'movie', 'film', 'song', 'album', 'show'
-}
-
-class PersonExtractor:
-    def __init__(self, text: str):
-        self.text = text
-        self.doc = nlp(text)
+class ProfessionalProfileExtractor:
+    def __init__(self):
+        # Invalid terms for filtering
+        self.invalid_terms = {
+            # Events and festivals
+            'navratri', 'eid mubarak', 'diwali', 'christmas', 'new year',
+            # Locations
+            'asia', 'germany', 'navi mumbai', 'new delhi', 'bangalore',
+            # Apps and platforms
+            'digi yatra', 'garena', 'free fire', 'wordle', 'crossword',
+            # Common false positives
+            'top stocks', 'fire max', 'latest news', 'breaking news'
+        }
         
-    def is_valid_name(self, name: str) -> bool:
-        """Validate person names with balanced rules"""
+        # Valid professional contexts
+        self.professional_contexts = {
+            'ceo', 'chief', 'president', 'director', 'head', 'vp', 'vice president',
+            'founder', 'co-founder', 'chairman', 'managing director', 'md', 'cto',
+            'engineer', 'architect', 'leader', 'executive', 'manager', 'principal',
+            'partner', 'associate', 'advisor', 'consultant', 'strategist', 'analyst'
+        }
+        
+        # Professional departments/areas
+        self.professional_areas = {
+            'technology', 'engineering', 'operations', 'strategy', 'innovation',
+            'research', 'development', 'product', 'digital', 'data', 'ai', 'ml',
+            'cloud', 'security', 'infrastructure', 'solutions', 'enterprise'
+        }
+
+    def is_valid_professional_name(self, name):
+        """Validate if a name meets professional criteria"""
         # Basic validation
-        if not name or len(name) < 4:
+        if not name or len(name) < 5:
             return False
             
         words = name.split()
         
-        # Must have at least 2 words
+        # Must have at least 2 capitalized words
         if len(words) < 2:
             return False
             
-        # First word must be capitalized
-        if not words[0][0].isupper():
+        capitalized_words = sum(1 for word in words if word and word[0].isupper())
+        if capitalized_words < 2:
             return False
             
-        # Check for obvious non-names
-        if name.lower() in INVALID_TERMS:
+        # Check for invalid terms
+        if name.lower() in self.invalid_terms:
             return False
             
         # No numbers or special characters (except hyphen and apostrophe)
         if re.search(r'[^a-zA-Z\s\'-]', name):
             return False
             
-        # Check for common false positives
-        false_positives = [
-            'breaking news', 'latest news', 'top stories',
-            'read more', 'click here', 'find out'
-        ]
-        if name.lower() in false_positives:
-            return False
-            
         return True
-        
-    def extract_quote(self, name: str) -> str:
-        """Extract quotes with improved patterns"""
-        quote_patterns = [
-            # Direct quotes
-            rf'"{name}[^"]*"|{name}[^"]*"([^"]+)"',
-            # Said/says patterns
-            rf"{name}\s+(?:said|says|stated|added|noted|mentioned)\s*(?:that\s+)?([^.!?]+[.!?])",
-            # According to patterns
-            rf'According to\s+{name},?\s+([^.!?]+[.!?])',
-            # Reverse attribution
-            rf'"([^"]+)"\s*(?:said|says|stated)\s+{name}'
+
+    def extract_designation(self, context):
+        """Extract valid professional designation"""
+        # Common designation patterns
+        patterns = [
+            r"(?:is|was|as)\s+(?:the\s+)?(?:new\s+)?([A-Z][a-z]+\s+)?(?:CEO|Chief|President|Director|Head|VP|Vice President|Founder|Executive)",
+            r"(?:Senior|Global|Regional)?\s*(?:Director|Manager|Lead|Head|Chief|Officer)\s+(?:of|for|at)\s+[A-Z][A-Za-z\s]+",
+            r"(?:CEO|CTO|CIO|CFO|COO|CHRO|CMO)\s+(?:and|&)?\s*(?:Co-founder|Founder|Director|President)?",
+            r"(?:Managing|Executive|General)\s+(?:Director|Partner|Manager|Principal)"
         ]
         
-        for pattern in quote_patterns:
-            matches = re.finditer(pattern, self.text, re.IGNORECASE)
-            for match in matches:
-                quote = match.group(1) if len(match.groups()) > 0 else match.group(0)
-                quote = quote.strip('"').strip()
-                
-                # Basic quote validation
-                if (10 < len(quote) < 500 and  # More flexible length
-                    not any(term in quote.lower() for term in INVALID_TERMS)):
-                    return quote
-        return None
+        for pattern in patterns:
+            match = re.search(pattern, context, re.IGNORECASE)
+            if match:
+                designation = match.group(0).strip()
+                # Validate designation has both role and area/department
+                words = designation.lower().split()
+                if (any(word in self.professional_contexts for word in words) and
+                    any(word in self.professional_areas for word in words)):
+                    return designation
+        return ""
+
+    def extract_company(self, context):
+        """Extract valid company name"""
+        patterns = [
+            r"(?:at|of|for|with)\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
+            r"joined\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
+            r"([A-Z][A-Za-z0-9\s&]+?)(?:'s|')\s+(?:CEO|Chief|President|Director)"
+        ]
         
-    def extract_role_info(self, name: str) -> dict:
-        """Extract designation and company with improved patterns"""
-        result = {"designation": None, "company": None}
-        
-        # Find context around name (expanded window)
-        name_idx = self.text.find(name)
-        if name_idx != -1:
-            context_start = max(0, name_idx - 150)
-            context_end = min(len(self.text), name_idx + 150)
-            context = self.text[context_start:context_end]
-            
-            # Enhanced designation patterns
-            designation_patterns = [
-                r"(?:is|was|as)\s+(?:the\s+)?(?:new\s+)?([A-Z][a-z]+\s+)?(?:CEO|Chief|President|Director|Manager|Head|VP|Vice President|Founder|Executive|Lead|Senior|Principal)",
-                r"(?:CEO|Chief|President|Director|Manager|Head|VP|Vice President|Founder|Executive)\s+(?:of|at|for)",
-                r"(?:Senior|Lead|Principal)\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?"
-            ]
-            
-            for pattern in designation_patterns:
-                designation_match = re.search(pattern, context, re.IGNORECASE)
-                if designation_match:
-                    result["designation"] = designation_match.group(0).strip()
-                    break
-            
-            # Enhanced company patterns
-            company_patterns = [
-                r"(?:at|of|for)\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
-                r"joined\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
-                r"with\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)"
-            ]
-            
-            for pattern in company_patterns:
-                company_match = re.search(pattern, context)
-                if company_match:
-                    company = company_match.group(1).strip()
-                    if (company not in INVALID_TERMS and 
-                        len(company) > 2 and 
-                        company[0].isupper()):
-                        result["company"] = company
-                        break
-                    
-        return result
-        
-    def extract_people(self) -> list:
-        """Extract person information with improved logic"""
-        people_info = {}
+        for pattern in patterns:
+            match = re.search(pattern, context)
+            if match:
+                company = match.group(1).strip()
+                # Validate company name
+                if (company and 
+                    company not in self.invalid_terms and
+                    len(company) > 2 and
+                    company[0].isupper()):
+                    return company
+        return ""
+
+    def extract_profiles(self, text):
+        """Extract professional profiles from text"""
+        doc = nlp(text)
+        profiles = {}
         
         # First pass: collect all mentions
-        for ent in self.doc.ents:
+        for ent in doc.ents:
             if ent.label_ == "PERSON":
                 name = ent.text.strip()
                 
-                if self.is_valid_name(name):
-                    if name not in people_info:
-                        people_info[name] = {
-                            "Name": name,
-                            "Designation": None,
-                            "Company": None,
-                            "Quote": None,
-                            "LinkedIn Search": None
-                        }
+                if self.is_valid_professional_name(name):
+                    # Get context around name
+                    start_idx = max(0, ent.start_char - 200)
+                    end_idx = min(len(text), ent.end_char + 200)
+                    context = text[start_idx:end_idx]
                     
-                    # Get role information
-                    role_info = self.extract_role_info(name)
-                    if role_info["designation"]:
-                        people_info[name]["Designation"] = role_info["designation"]
-                    if role_info["company"]:
-                        people_info[name]["Company"] = role_info["company"]
+                    designation = self.extract_designation(context)
+                    company = self.extract_company(context)
                     
-                    # Get quote
-                    quote = self.extract_quote(name)
-                    if quote:
-                        people_info[name]["Quote"] = quote
+                    # Only include if we found professional context
+                    if designation or company:
+                        if name not in profiles:
+                            profiles[name] = {
+                                "Name": name,
+                                "Designation": designation,
+                                "Company": company,
+                                "LinkedIn Search": ""
+                            }
+                        else:
+                            # Update existing profile if new info is found
+                            if designation and not profiles[name]["Designation"]:
+                                profiles[name]["Designation"] = designation
+                            if company and not profiles[name]["Company"]:
+                                profiles[name]["Company"] = company
         
         # Second pass: clean and format
-        clean_results = []
-        for name, info in people_info.items():
-            # Include entries with any additional information
-            if info["Designation"] or info["Quote"] or info["Company"]:
-                # Create LinkedIn search URL
-                search_terms = [name]
-                if info["Company"]:
-                    search_terms.append(info["Company"])
-                if info["Designation"]:
-                    # Add key terms from designation
-                    key_terms = re.findall(r'(?:CEO|Chief|President|Director|Manager|Head|VP|Founder)', 
-                                         info["Designation"], 
-                                         re.IGNORECASE)
-                    if key_terms:
-                        search_terms.extend(key_terms)
-                
-                info["LinkedIn Search"] = f"https://www.google.com/search?q=LinkedIn+" + "+".join(term.replace(" ", "+") for term in search_terms)
-                
-                clean_results.append(info)
+        results = []
+        for name, profile in profiles.items():
+            # Create LinkedIn search URL
+            search_terms = [name]
+            if profile["Company"]:
+                search_terms.append(profile["Company"])
+            
+            profile["LinkedIn Search"] = f"https://www.google.com/search?q=LinkedIn+" + "+".join(term.replace(" ", "+") for term in search_terms)
+            results.append(profile)
         
-        return clean_results
+        return results
 
 # Page title and description
-st.title("Link2People - AI People Insights")
-st.markdown("Extract detailed insights about people mentioned in any article")
+st.title("Link2People - Professional Insights")
+st.markdown("Extract professional profiles from any article")
 
 # URL input
 url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
@@ -241,28 +209,27 @@ if st.button("Analyze"):
                     st.stop()
 
             # Process content
-            with st.spinner("Extracting verified people mentions..."):
-                extractor = PersonExtractor(text)
-                results = extractor.extract_people()
+            with st.spinner("Extracting professional profiles..."):
+                extractor = ProfessionalProfileExtractor()
+                results = extractor.extract_profiles(text)
 
             # Display results
             if results:
-                st.success(f"Found {len(results)} verified people mentions!")
+                st.success(f"Found {len(results)} professional profiles!")
                 
                 # Convert to DataFrame for display
                 df = pd.DataFrame(results)
                 
                 # Display metrics
-                col1, col2, col3 = st.columns(3)
+                col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("People Found", len(df))
+                    st.metric("Profiles Found", len(df))
                 with col2:
-                    st.metric("With Quotes", len(df[df["Quote"].notna()]))
-                with col3:
-                    st.metric("With Roles", len(df[df["Designation"].notna()]))
+                    st.metric("Complete Profiles", 
+                             len(df[df["Designation"].astype(bool) & df["Company"].astype(bool)]))
                 
                 # Display detailed insights
-                st.subheader("Detailed People Insights")
+                st.subheader("Professional Profiles")
                 
                 # Display as interactive table
                 st.dataframe(
@@ -271,7 +238,6 @@ if st.button("Analyze"):
                         "Name": st.column_config.TextColumn("Name", width="medium"),
                         "Designation": st.column_config.TextColumn("Designation", width="medium"),
                         "Company": st.column_config.TextColumn("Company", width="medium"),
-                        "Quote": st.column_config.TextColumn("Quote", width="large"),
                         "LinkedIn Search": st.column_config.LinkColumn("LinkedIn Search")
                     },
                     hide_index=True,
@@ -285,7 +251,7 @@ if st.button("Analyze"):
                     st.download_button(
                         label="Download CSV",
                         data=csv,
-                        file_name="people_insights.csv",
+                        file_name="professional_profiles.csv",
                         mime="text/csv"
                     )
                 with col2:
@@ -293,11 +259,11 @@ if st.button("Analyze"):
                     st.download_button(
                         label="Download JSON",
                         data=json_str,
-                        file_name="people_insights.json",
+                        file_name="professional_profiles.json",
                         mime="application/json"
                     )
             else:
-                st.info("No verified people were found in the article.")
+                st.info("No professional profiles were found in the article.")
                 
         except requests.exceptions.RequestException as e:
             st.error(f"Error fetching the article: {str(e)}")
