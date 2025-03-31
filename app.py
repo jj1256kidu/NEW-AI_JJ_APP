@@ -7,17 +7,42 @@ st.set_page_config(
     layout="wide"
 )
 
-import spacy
+import os
+import sys
+import json
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import re
-import json
-import openai
-import os
 
-# Initialize OpenAI API
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Initialize OpenAI - with error handling
+try:
+    from openai import OpenAI
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+except ImportError:
+    st.error("OpenAI package not found. Falling back to spaCy only mode.")
+    client = None
+except Exception as e:
+    st.error(f"Error initializing OpenAI: {str(e)}")
+    client = None
+
+# Initialize spaCy
+import spacy
+
+@st.cache_resource
+def load_model():
+    try:
+        return spacy.load("en_core_web_sm")
+    except Exception as e:
+        st.error(f"Error loading spaCy model: {str(e)}")
+        return None
+
+# Load NLP model
+nlp = load_model()
+
+if nlp is None:
+    st.error("Failed to load NLP model. Please try refreshing the page.")
+    st.stop()
 
 # System prompt for GPT-4
 SYSTEM_PROMPT = """You are an intelligent assistant designed to analyze news articles. When provided with raw extracted content from a news URL, your task is to identify all relevant human individuals mentioned in the article and generate structured insights about each of them.
@@ -47,30 +72,13 @@ Respond in JSON format suitable for processing:
 ]
 """
 
-# Initialize spaCy for backup NER
-@st.cache_resource
-def load_model():
-    try:
-        return spacy.load("en_core_web_sm")
-    except Exception as e:
-        st.error(f"Error loading spaCy model: {str(e)}")
-        return None
-
-# Load NLP model
-nlp = load_model()
-
-if nlp is None:
-    st.error("Failed to load NLP model. Please try refreshing the page.")
-    st.stop()
-
-# Page title and description
-st.title("Link2People - AI People Insights")
-st.markdown("Extract detailed insights about people mentioned in any article")
-
 def extract_people_with_gpt4(text):
     """Extract people information using GPT-4"""
+    if client is None:
+        return None
+        
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -125,6 +133,10 @@ def extract_people_with_spacy(text, doc):
     
     return people_insights
 
+# Page title and description
+st.title("Link2People - AI People Insights")
+st.markdown("Extract detailed insights about people mentioned in any article")
+
 # URL input
 url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
 
@@ -160,6 +172,7 @@ if st.button("Analyze"):
                 
                 # Fallback to spaCy if GPT-4 fails
                 if people_insights is None:
+                    st.info("Using fallback extraction method...")
                     doc = nlp(text[:1000000])
                     people_insights = extract_people_with_spacy(text, doc)
 
