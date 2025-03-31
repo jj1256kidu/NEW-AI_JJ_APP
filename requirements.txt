@@ -1,7 +1,7 @@
-streamlit
-spacy
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
-requests
-beautifulsoup4
-pandas
-openpyxl
+numpy==1.24.3
+pandas==1.5.3
+streamlit==1.31.0
+spacy==3.5.3
+requests==2.31.0
+beautifulsoup4==4.12.2
+openpyxl==3.1.2
