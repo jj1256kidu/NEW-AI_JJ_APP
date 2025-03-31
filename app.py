@@ -12,10 +12,48 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Must be the first Streamlit command
 st.set_page_config(
-    page_title="NewsNex – Clear positioning: from news to next opportunities.",
-    page_icon="🧠 📰 🎯 ⚡",
+    page_title="NewsNex - From News to Next Opportunities",
+    page_icon="🎯",
     layout="wide"
 )
+
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-title {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1E3A8A;
+        margin-bottom: 0;
+    }
+    .tagline {
+        font-size: 1.2rem;
+        color: #4B5563;
+        margin-bottom: 2rem;
+    }
+    .sub-tagline {
+        font-size: 1.1rem;
+        color: #6B7280;
+        font-style: italic;
+    }
+    .stButton > button {
+        background-color: #1E3A8A;
+        color: white;
+        width: 100%;
+    }
+    .stButton > button:hover {
+        background-color: #1E40AF;
+    }
+    .metric-card {
+        background-color: #F3F4F6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+    }
+    .st-emotion-cache-1y4p8pa {
+        max-width: 100rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 @st.cache_resource
 def load_nlp_model():
@@ -48,7 +86,6 @@ class ProfileExtractor:
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
 
-            # Fetch content
             response = requests.get(
                 url, 
                 headers=headers, 
@@ -57,14 +94,12 @@ class ProfileExtractor:
             )
             response.raise_for_status()
             
-            # Parse HTML
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove unwanted elements
             for element in soup(['script', 'style', 'nav', 'footer', 'iframe', 'header', 'aside', 'meta']):
                 element.decompose()
             
-            # Try multiple methods to find content
             text = ""
             
             # Method 1: Look for article content
@@ -88,11 +123,10 @@ class ProfileExtractor:
                 text = soup.get_text(separator=' ', strip=True)
             
             # Clean the text
-            text = re.sub(r'\s+', ' ', text)  # Remove extra whitespace
-            text = re.sub(r'[^\w\s\'-]', ' ', text)  # Keep only valid characters
-            text = ' '.join(word for word in text.split() if len(word) > 1)  # Remove single characters
+            text = re.sub(r'\s+', ' ', text)
+            text = re.sub(r'[^\w\s\'-]', ' ', text)
+            text = ' '.join(word for word in text.split() if len(word) > 1)
             
-            # Debug info
             if not text:
                 st.warning("Debug: No text extracted from the webpage")
                 return ""
@@ -196,45 +230,74 @@ class ProfileExtractor:
         return results
 
 def main():
-    st.title("🧠 Link2People: Professional Profile Extractor")
-    st.markdown("Extract professional profiles from any article URL")
+    # Updated header with new branding
+    st.markdown('<p class="main-title">🎯 NewsNex</p>', unsafe_allow_html=True)
+    st.markdown('<p class="tagline">Where News Sparks the Next Deal</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-tagline">🧠 Smarter Prospecting Starts with News</p>', unsafe_allow_html=True)
     
-    url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
+    st.markdown("---")
     
-    if st.button("Extract Profiles"):
+    url = st.text_input("📰 Enter news article URL:", placeholder="https://example.com/article")
+    
+    if st.button("⚡ Extract Opportunities"):
         if not url:
-            st.warning("Please enter a URL to analyze.")
+            st.warning("⚠️ Please enter a URL to analyze.")
             return
             
         try:
-            with st.spinner("Fetching and analyzing article..."):
+            with st.spinner("🔍 Analyzing article for business opportunities..."):
                 extractor = ProfileExtractor()
                 
-                # Get article text
                 text = extractor.get_clean_text_from_url(url)
                 if not text:
-                    st.warning("No readable content found in the article.")
-                    st.write("Debug: Please check if the URL is accessible and contains article content.")
+                    st.warning("📭 No readable content found in the article.")
+                    st.write("🔍 Debug: Please check if the URL is accessible and contains article content.")
                     return
                 
-                # Show extracted text for debugging (can be removed in production)
-                with st.expander("Show extracted text"):
+                with st.expander("📝 View extracted content"):
                     st.text(text[:500] + "...")
                     
-                # Extract profiles
                 profiles = extractor.extract_profiles(text)
                 
                 if profiles:
                     df = pd.DataFrame(profiles)
                     
-                    col1, col2 = st.columns(2)
+                    st.markdown("### 📊 Opportunity Overview")
+                    
+                    col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("Profiles Found", len(df))
+                        st.markdown(
+                            f"""
+                            <div class="metric-card">
+                                <h3>🎯 Total Prospects</h3>
+                                <h2>{len(df)}</h2>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
                     with col2:
                         complete = len(df[df["Designation"].astype(bool) & df["Company"].astype(bool)])
-                        st.metric("Complete Profiles", complete)
+                        st.markdown(
+                            f"""
+                            <div class="metric-card">
+                                <h3>✅ Complete Profiles</h3>
+                                <h2>{complete}</h2>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                    with col3:
+                        st.markdown(
+                            f"""
+                            <div class="metric-card">
+                                <h3>🏢 Companies</h3>
+                                <h2>{df['Company'].nunique()}</h2>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
                     
-                    st.subheader("Extracted Profiles")
+                    st.markdown("### 🎯 Identified Prospects")
                     st.dataframe(
                         df,
                         column_config={
@@ -247,31 +310,41 @@ def main():
                         use_container_width=True
                     )
                     
+                    st.markdown("### 📥 Export Options")
                     col1, col2 = st.columns(2)
                     with col1:
                         csv = df.to_csv(index=False).encode('utf-8')
                         st.download_button(
-                            "Download CSV",
+                            "📊 Download CSV",
                             csv,
-                            "professional_profiles.csv",
-                            "text/csv"
+                            "newsnex_prospects.csv",
+                            "text/csv",
+                            use_container_width=True
                         )
                     with col2:
                         json_str = df.to_json(orient="records", indent=2)
                         st.download_button(
-                            "Download JSON",
+                            "📋 Download JSON",
                             json_str,
-                            "professional_profiles.json",
-                            "application/json"
+                            "newsnex_prospects.json",
+                            "application/json",
+                            use_container_width=True
                         )
                 else:
-                    st.info("No professional profiles found in the article.")
+                    st.info("ℹ️ No business prospects found in this article.")
                     
         except Exception as e:
-            st.error(f"Error processing article: {str(e)}")
+            st.error(f"❌ Error processing article: {str(e)}")
 
     st.markdown("---")
-    st.markdown("Made with ❤️ by AI")
+    st.markdown(
+        """
+        <div style='text-align: center'>
+            Made with ❤️ by NewsNex | Transform News into Opportunities
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
