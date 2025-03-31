@@ -1,13 +1,10 @@
 import streamlit as st
 
-# Must be the first Streamlit command
+# Must be the first Streamlit command - removed theme argument that was causing the error
 st.set_page_config(
     page_title="Link2People",
     page_icon="🔍",
-    layout="wide",
-    theme={
-        "font": "sans serif"  # Fixed font setting
-    }
+    layout="wide"
 )
 
 import os
@@ -21,44 +18,32 @@ def initialize_spacy():
     try:
         import spacy
         try:
-            # Try to load the model directly
-            return spacy.load('en_core_web_sm')
+            # Try to load the model directly first
+            nlp = spacy.load('en_core_web_sm')
+            return nlp
         except OSError:
-            # If model isn't found, install it using pip
             st.info("Installing spaCy model...")
             try:
-                # Modified installation command
-                subprocess.run([
-                    sys.executable,
-                    "-m",
-                    "spacy",
-                    "download",
-                    "en_core_web_sm"
-                ], check=True, capture_output=True, text=True)
-                
-                return spacy.load('en_core_web_sm')
-            except subprocess.CalledProcessError as e:
-                st.error(f"Failed to install spaCy model: {e}")
+                # Install the model using pip directly
+                os.system(f"{sys.executable} -m pip install en-core-web-sm==3.7.1")
+                nlp = spacy.load('en_core_web_sm')
+                return nlp
+            except Exception as e:
+                st.error(f"Failed to install spaCy model: {str(e)}")
                 return None
-            
     except Exception as e:
         st.error(f"Error initializing spaCy: {str(e)}")
         return None
 
-# Rest of your imports
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-import re
-
-# Load NLP model
-nlp = initialize_spacy()
-
-if nlp is None:
-    st.error("Failed to load NLP model. Please try refreshing the page.")
+# Import remaining packages
+try:
+    import pandas as pd
+    import requests
+    from bs4 import BeautifulSoup
+    import re
+except ImportError as e:
+    st.error(f"Failed to import required packages: {str(e)}")
     st.stop()
-
-# Rest of your code remains the same...
 
 # Load NLP model
 nlp = initialize_spacy()
@@ -71,7 +56,7 @@ if nlp is None:
 st.title("Link2People - AI People Extractor")
 st.markdown("Extract people information from any webpage")
 
-# Custom CSS for better styling
+# Custom styling
 st.markdown("""
     <style>
     .stTextInput > div > div > input {
@@ -102,7 +87,7 @@ if st.button("Analyze"):
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124'
                 }
                 response = requests.get(url, headers=headers, timeout=15)
-                response.raise_for_status()  # Raise an exception for bad status codes
+                response.raise_for_status()
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
                 # Extract text from relevant HTML elements
