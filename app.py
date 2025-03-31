@@ -18,7 +18,10 @@ import re
 # Initialize OpenAI - with error handling
 try:
     from openai import OpenAI
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    # Simplified client initialization
+    client = OpenAI(
+        api_key=st.secrets["OPENAI_API_KEY"]
+    )
 except ImportError:
     st.error("OpenAI package not found. Falling back to spaCy only mode.")
     client = None
@@ -136,6 +139,12 @@ def extract_people_with_spacy(text, doc):
 # Page title and description
 st.title("Link2People - AI People Insights")
 st.markdown("Extract detailed insights about people mentioned in any article")
+
+# Add OpenAI API key status indicator
+if "OPENAI_API_KEY" in st.secrets:
+    st.success("OpenAI API key found! Using GPT-4 for enhanced extraction.")
+else:
+    st.warning("OpenAI API key not found. Using basic extraction mode.")
 
 # URL input
 url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
