@@ -1,3 +1,35 @@
+# ADD THESE LINES AT THE VERY TOP OF YOUR app.py
+import streamlit as st
+import spacy
+import subprocess
+import sys
+
+def install_spacy_model():
+    try:
+        spacy.load('en_core_web_sm')
+    except OSError:
+        subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+
+# Call this before your main code
+install_spacy_model()
+
+# ============ YOUR EXISTING CODE STARTS HERE ============
+# Rest of your imports
+from bs4 import BeautifulSoup
+import requests
+import pandas as pd
+import re
+from datetime import datetime
+
+# Aurora Theme CSS
+aurora_css = """
+<style>
+    /* Your existing CSS */
+</style>
+"""
+
+# Rest of your code...
+
 # app.py
 import streamlit as st
 import requests
