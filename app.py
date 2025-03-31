@@ -15,19 +15,24 @@ import requests
 from bs4 import BeautifulSoup
 import re
 
-# Initialize OpenAI - with error handling
-try:
-    from openai import OpenAI
-    # Simplified client initialization
-    client = OpenAI(
-        api_key=st.secrets["OPENAI_API_KEY"]
-    )
-except ImportError:
-    st.error("OpenAI package not found. Falling back to spaCy only mode.")
-    client = None
-except Exception as e:
-    st.error(f"Error initializing OpenAI: {str(e)}")
-    client = None
+# Initialize Hugging Face (free) - you'll need to get a free token from huggingface.co
+HUGGINGFACE_API_TOKEN = st.secrets.get("HUGGINGFACE_API_TOKEN", "")
+
+def query_huggingface(text):
+    """Query Hugging Face model for text analysis"""
+    API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-mnli"
+    headers = {"Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}"}
+    
+    try:
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            json={"inputs": text, "parameters": {"candidate_labels": ["person", "organization", "location"]}}
+        )
+        return response.json()
+    except Exception as e:
+        st.error(f"Error querying Hugging Face API: {str(e)}")
+        return None
 
 # Initialize spaCy
 import spacy
@@ -47,104 +52,59 @@ if nlp is None:
     st.error("Failed to load NLP model. Please try refreshing the page.")
     st.stop()
 
-# System prompt for GPT-3.5
-SYSTEM_PROMPT = """You are an intelligent assistant designed to analyze news articles. When provided with raw extracted content from a news URL, your task is to identify all relevant human individuals mentioned in the article and generate structured insights about each of them.
-
-Instructions:
-1. Parse the given text carefully and identify **real human individuals** only. Avoid generic words, company names, or common nouns.
-2. For each individual, extract the following details:
-   - Full Name
-   - Designation or Role
-   - Company or Organization (if mentioned)
-   - Relevant Quote (if any)
-   - Context or Summary of their mention in the article (1-2 lines)
-
-3. If multiple people are mentioned, list each of them in a structured format.
-4. DO NOT include irrelevant names, fictional characters, or repeated names unless they are mentioned in different contexts.
-5. Make sure each entry is **accurate, concise, and context-aware**.
-
-Respond in JSON format suitable for processing:
-[
-  {
-    "Name": "Full Name",
-    "Designation": "Role/Title",
-    "Company": "Organization",
-    "Quote": "Direct quote if available",
-    "Context": "Brief summary of mention"
-  }
-]
-"""
-
-def extract_people_with_gpt(text):
-    """Extract people information using GPT-3.5"""
-    if client is None:
-        return None
-        
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Using GPT-3.5-turbo
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.3,
-            max_tokens=1500
-        )
-        
-        # Parse the response
-        content = response.choices[0].message.content
-        return json.loads(content)
-    except Exception as e:
-        st.error(f"Error processing with GPT-3.5: {str(e)}")
-        return None
-
-def extract_people_with_spacy(text, doc):
-    """Fallback extraction using spaCy"""
+def extract_people_with_enhanced_spacy(text, doc):
+    """Enhanced people extraction using spaCy and rules"""
     people_insights = []
     seen_names = set()
     
-    for ent in doc.ents:
-        if ent.label_ == 'PERSON' and ent.text.strip() and ent.text not in seen_names:
-            name = ent.text.strip()
-            if len(name.split()) < 2:
-                continue
-            
-            # Get surrounding context
-            start_idx = max(0, ent.start_char - 150)
-            end_idx = min(len(text), ent.end_char + 150)
-            context = text[start_idx:end_idx].strip()
-            
-            # Find organization
-            company = "Unknown"
-            for org in doc.ents:
-                if org.label_ == 'ORG' and abs(org.start - ent.start) < 10:
-                    company = org.text
-                    break
-            
-            # Extract quote if available
-            quote_match = re.search(r'"([^"]*)"', context)
-            quote = quote_match.group(1) if quote_match else "No direct quote found"
-            
-            people_insights.append({
-                "Name": name,
-                "Designation": "Unknown",
-                "Company": company,
-                "Quote": quote,
-                "Context": context
-            })
-            seen_names.add(name)
+    # Common titles to help identify people
+    titles = r"(Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.|CEO|Chief|President|Director|Manager|Head|VP|Vice President|Founder|Co-founder|Executive|Leader|Chairman)"
+    
+    # Find sentences with potential people mentions
+    sentences = [sent.text for sent in doc.sents]
+    
+    for sent in sentences:
+        # Process each sentence
+        sent_doc = nlp(sent)
+        
+        for ent in sent_doc.ents:
+            if ent.label_ == 'PERSON' and ent.text.strip() and ent.text not in seen_names:
+                name = ent.text.strip()
+                if len(name.split()) < 2:  # Skip single word names
+                    continue
+                
+                # Get surrounding context
+                context = sent.strip()
+                
+                # Find title/designation
+                title_match = re.search(titles, context, re.IGNORECASE)
+                designation = title_match.group(0) if title_match else "Unknown"
+                
+                # Find organization
+                company = "Unknown"
+                for org in sent_doc.ents:
+                    if org.label_ == 'ORG':
+                        company = org.text
+                        break
+                
+                # Extract quote if available
+                quote_match = re.search(r'"([^"]*)"', context)
+                quote = quote_match.group(1) if quote_match else "No direct quote found"
+                
+                people_insights.append({
+                    "Name": name,
+                    "Designation": designation,
+                    "Company": company,
+                    "Quote": quote,
+                    "Context": context
+                })
+                seen_names.add(name)
     
     return people_insights
 
 # Page title and description
 st.title("Link2People - AI People Insights")
 st.markdown("Extract detailed insights about people mentioned in any article")
-
-# Add OpenAI API key status indicator
-if "OPENAI_API_KEY" in st.secrets:
-    st.success("OpenAI API key found! Using GPT-3.5 for enhanced extraction.")
-else:
-    st.warning("OpenAI API key not found. Using basic extraction mode.")
 
 # URL input
 url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
@@ -176,14 +136,8 @@ if st.button("Analyze"):
 
             # Analyze content
             with st.spinner("Analyzing people mentions..."):
-                # Try GPT-3.5 first
-                people_insights = extract_people_with_gpt(text)
-                
-                # Fallback to spaCy if GPT-3.5 fails
-                if people_insights is None:
-                    st.info("Using fallback extraction method...")
-                    doc = nlp(text[:1000000])
-                    people_insights = extract_people_with_spacy(text, doc)
+                doc = nlp(text[:1000000])  # Limit text length to prevent memory issues
+                people_insights = extract_people_with_enhanced_spacy(text, doc)
 
             # Display results
             if people_insights:
