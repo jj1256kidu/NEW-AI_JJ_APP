@@ -12,7 +12,6 @@ import os
 # Check if setup.sh exists and is executable
 if os.path.exists('setup.sh'):
     try:
-        # Make setup.sh executable if it isn't already
         os.chmod('setup.sh', 0o755)
     except Exception as e:
         st.warning(f"Note: Could not set execute permissions on setup.sh: {str(e)}")
@@ -86,7 +85,23 @@ st.markdown("""
         position: relative;
         overflow: hidden;
         border-radius: 10px;
-        background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+    }
+    #globe-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-size: 1.2rem;
+        z-index: 1;
+    }
+    .globe-canvas {
+        opacity: 0;
+        transition: opacity 1s ease-in-out;
+    }
+    .globe-canvas.loaded {
+        opacity: 1;
     }
     .st-emotion-cache-1y4p8pa {
         max-width: 100rem;
@@ -105,128 +120,178 @@ st.markdown("""
 <!-- Add Three.js library -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-    // Globe visualization
-    function createGlobe() {
-        const container = document.getElementById('globe-container');
-        if (!container) return;
-
-        const width = container.offsetWidth;
-        const height = container.offsetHeight;
-
-        // Setup scene
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    class ParticleGlobe {
+        constructor(containerId) {
+            this.container = document.getElementById(containerId);
+            if (!this.container) return;
+            
+            this.width = this.container.offsetWidth;
+            this.height = this.container.offsetHeight;
+            this.particleCount = 2500;
+            this.radius = 5;
+            
+            this.init();
+        }
         
-        renderer.setSize(width, height);
-        container.appendChild(renderer.domElement);
-
-        // Create globe with particles
-        const geometry = new THREE.SphereGeometry(5, 64, 64);
-        const vertices = [];
-        const positions = geometry.attributes.position.array;
-
-        for (let i = 0; i < positions.length; i += 3) {
-            vertices.push(
-                positions[i],
-                positions[i + 1],
-                positions[i + 2]
-            );
+        init() {
+            // Scene setup
+            this.scene = new THREE.Scene();
+            
+            // Camera setup with better perspective
+            this.camera = new THREE.PerspectiveCamera(60, this.width / this.height, 0.1, 1000);
+            this.camera.position.z = 10;
+            
+            // Renderer setup with antialiasing
+            this.renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                alpha: true
+            });
+            this.renderer.setSize(this.width, this.height);
+            this.renderer.setPixelRatio(window.devicePixelRatio);
+            
+            // Add canvas to container
+            this.container.appendChild(this.renderer.domElement);
+            this.renderer.domElement.classList.add('globe-canvas');
+            
+            // Create particles
+            this.createParticles();
+            
+            // Add lights
+            this.addLights();
+            
+            // Start animation
+            this.animate();
+            
+            // Add interaction
+            this.addInteraction();
+            
+            // Handle resize
+            this.handleResize();
+            
+            // Show canvas when loaded
+            setTimeout(() => {
+                this.renderer.domElement.classList.add('loaded');
+                const loading = document.getElementById('globe-loading');
+                if (loading) loading.style.display = 'none';
+            }, 500);
         }
-
-        const particleGeometry = new THREE.BufferGeometry();
-        particleGeometry.setAttribute(
-            'position',
-            new THREE.Float32BufferAttribute(vertices, 3)
-        );
-
-        const material = new THREE.PointsMaterial({
-            color: 0xffffff,
-            size: 0.05,
-            transparent: true,
-            opacity: 0.8,
-            blending: THREE.AdditiveBlending
-        });
-
-        const globe = new THREE.Points(particleGeometry, material);
-        scene.add(globe);
-
-        // Add ambient light
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-        scene.add(ambientLight);
-
-        // Add point light
-        const pointLight = new THREE.PointLight(0xffffff, 1);
-        pointLight.position.set(10, 10, 10);
-        scene.add(pointLight);
-
-        camera.position.z = 8;
-
-        // Animation
-        function animate() {
-            requestAnimationFrame(animate);
-            globe.rotation.y += 0.002;
-            renderer.render(scene, camera);
+        
+        createParticles() {
+            const particles = new Float32Array(this.particleCount * 3);
+            const colors = new Float32Array(this.particleCount * 3);
+            
+            for (let i = 0; i < this.particleCount; i++) {
+                const i3 = i * 3;
+                const phi = Math.acos(-1 + (2 * i) / this.particleCount);
+                const theta = Math.sqrt(this.particleCount * Math.PI) * phi;
+                
+                // Position
+                particles[i3] = this.radius * Math.cos(theta) * Math.sin(phi);
+                particles[i3 + 1] = this.radius * Math.sin(theta) * Math.sin(phi);
+                particles[i3 + 2] = this.radius * Math.cos(phi);
+                
+                // Color
+                colors[i3] = 0.5 + Math.random() * 0.5;
+                colors[i3 + 1] = 0.5 + Math.random() * 0.5;
+                colors[i3 + 2] = 1.0;
+            }
+            
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(particles, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const material = new THREE.PointsMaterial({
+                size: 0.05,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending
+            });
+            
+            this.globe = new THREE.Points(geometry, material);
+            this.scene.add(this.globe);
         }
-
-        animate();
-
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            const newWidth = container.offsetWidth;
-            const newHeight = container.offsetHeight;
-            camera.aspect = newWidth / newHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(newWidth, newHeight);
-        });
-
-        // Add interactivity
-        let isDragging = false;
-        let previousMousePosition = { x: 0, y: 0 };
-
-        container.addEventListener('mousedown', (e) => {
-            isDragging = true;
-            previousMousePosition = {
-                x: e.clientX,
-                y: e.clientY
-            };
-        });
-
-        container.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-
-            const deltaMove = {
-                x: e.clientX - previousMousePosition.x,
-                y: e.clientY - previousMousePosition.y
-            };
-
-            globe.rotation.y += deltaMove.x * 0.005;
-            globe.rotation.x += deltaMove.y * 0.005;
-
-            previousMousePosition = {
-                x: e.clientX,
-                y: e.clientY
-            };
-        });
-
-        container.addEventListener('mouseup', () => {
-            isDragging = false;
-        });
-
-        container.addEventListener('mouseleave', () => {
-            isDragging = false;
-        });
+        
+        addLights() {
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+            this.scene.add(ambientLight);
+            
+            const pointLight = new THREE.PointLight(0x4169e1, 1);
+            pointLight.position.set(10, 10, 10);
+            this.scene.add(pointLight);
+        }
+        
+        animate() {
+            requestAnimationFrame(() => this.animate());
+            
+            if (this.globe) {
+                this.globe.rotation.y += 0.001;
+                this.globe.position.y = Math.sin(Date.now() * 0.001) * 0.1;
+            }
+            
+            this.renderer.render(this.scene, this.camera);
+        }
+        
+        addInteraction() {
+            let isMouseDown = false;
+            let mouseX = 0;
+            let mouseY = 0;
+            
+            this.container.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+            
+            this.container.addEventListener('mousemove', (e) => {
+                if (!isMouseDown) return;
+                
+                const deltaX = e.clientX - mouseX;
+                const deltaY = e.clientY - mouseY;
+                
+                if (this.globe) {
+                    this.globe.rotation.y += deltaX * 0.005;
+                    this.globe.rotation.x += deltaY * 0.005;
+                }
+                
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+            
+            this.container.addEventListener('mouseup', () => {
+                isMouseDown = false;
+            });
+            
+            this.container.addEventListener('mouseleave', () => {
+                isMouseDown = false;
+            });
+        }
+        
+        handleResize() {
+            window.addEventListener('resize', () => {
+                this.width = this.container.offsetWidth;
+                this.height = this.container.offsetHeight;
+                
+                this.camera.aspect = this.width / this.height;
+                this.camera.updateProjectionMatrix();
+                
+                this.renderer.setSize(this.width, this.height);
+            });
+        }
     }
-
+    
     // Initialize globe when document is ready
+    function initGlobe() {
+        const globe = new ParticleGlobe('globe-container');
+    }
+    
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', createGlobe);
+        document.addEventListener('DOMContentLoaded', initGlobe);
     } else {
-        createGlobe();
+        initGlobe();
     }
 </script>
 """, unsafe_allow_html=True)
-
 @st.cache_resource(show_spinner=False)
 def load_nlp_model():
     try:
@@ -241,7 +306,8 @@ class ProfileExtractor:
         self.nlp = load_nlp_model()
         self.invalid_terms = {
             'navratri', 'eid', 'diwali', 'asia', 'germany', 'mumbai', 'delhi',
-            'digi yatra', 'free fire', 'wordle', 'top stocks', 'fire max'
+            'digi yatra', 'free fire', 'wordle', 'top stocks', 'fire max',
+            'breaking news', 'latest news', 'read more', 'share market'
         }
 
     def get_clean_text_from_url(self, url):
@@ -269,13 +335,17 @@ class ProfileExtractor:
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove unwanted elements
-            for element in soup(['script', 'style', 'nav', 'footer', 'iframe', 'header', 'aside', 'meta']):
+            for element in soup(['script', 'style', 'nav', 'footer', 'iframe', 'header', 'aside', 'meta', 'noscript']):
+                element.decompose()
+            
+            # Remove ads and promotional content
+            for element in soup.find_all(class_=re.compile(r'ad|promo|banner|sidebar|cookie|popup|newsletter|subscription', re.I)):
                 element.decompose()
             
             text = ""
             
             # Method 1: Look for article content
-            article = soup.find('article')
+            article = soup.find('article') or soup.find(class_=re.compile(r'article|post|content|story', re.I))
             if article:
                 text = article.get_text(separator=' ', strip=True)
             
@@ -290,23 +360,19 @@ class ProfileExtractor:
                 paragraphs = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
                 text = ' '.join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
             
-            # Method 4: Get all text if nothing else worked
-            if not text:
-                text = soup.get_text(separator=' ', strip=True)
-            
             # Clean the text
             text = re.sub(r'\s+', ' ', text)
             text = re.sub(r'[^\w\s\'-]', ' ', text)
             text = ' '.join(word for word in text.split() if len(word) > 1)
             
             if not text:
-                st.warning("Debug: No text extracted from the webpage")
+                st.warning("No readable content found in the webpage")
                 return ""
                 
             return text.strip()
             
         except Exception as e:
-            st.error(f"Debug: Error in get_clean_text_from_url: {str(e)}")
+            st.error(f"Error fetching URL: {str(e)}")
             raise Exception(f"Error fetching URL: {str(e)}")
 
     def is_valid_name(self, name):
@@ -325,6 +391,10 @@ class ProfileExtractor:
             return False
             
         if re.search(r'[^a-zA-Z\s\'-]', name):
+            return False
+            
+        # Additional validation for common false positives
+        if re.search(r'\b(Private|Limited|Ltd|Inc|Corp|AG|News|Update)\b', name):
             return False
             
         return True
@@ -356,7 +426,10 @@ class ProfileExtractor:
             match = re.search(pattern, text)
             if match:
                 company = match.group(1).strip()
-                if company and company not in self.invalid_terms:
+                if (company and 
+                    company not in self.invalid_terms and 
+                    len(company) > 2 and 
+                    not re.search(r'\d', company)):
                     return company
         return ""
 
@@ -407,8 +480,12 @@ def main():
     st.markdown('<p class="tagline">Where News Sparks the Next Deal</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-tagline">🧠 Smarter Prospecting Starts with News</p>', unsafe_allow_html=True)
     
-    # Add 3D Globe
-    st.markdown('<div id="globe-container"></div>', unsafe_allow_html=True)
+    # Add 3D Globe with loading indicator
+    st.markdown("""
+    <div id="globe-container">
+        <div id="globe-loading">Loading visualization...</div>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.markdown("---")
     
