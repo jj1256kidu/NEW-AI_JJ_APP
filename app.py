@@ -14,22 +14,6 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import re
-
-# Initialize OpenAI - with error handling
-try:
-    from openai import OpenAI
-    # Simplified client initialization
-    client = OpenAI(
-        api_key=st.secrets["OPENAI_API_KEY"]
-    )
-except ImportError:
-    st.error("OpenAI package not found. Falling back to spaCy only mode.")
-    client = None
-except Exception as e:
-    st.error(f"Error initializing OpenAI: {str(e)}")
-    client = None
-
-# Initialize spaCy for backup
 import spacy
 
 @st.cache_resource
@@ -47,144 +31,140 @@ if nlp is None:
     st.error("Failed to load NLP model. Please try refreshing the page.")
     st.stop()
 
-# Enhanced system prompt
-SYSTEM_PROMPT = """You are an intelligent assistant integrated into a news article analytics tool. Your job is to extract *only real human beings* mentioned in the article and generate clean, structured profiles from the text.
-
-Follow these strict rules:
-
-1. Only include **actual people** — do NOT include:
-   - City names (e.g., Navi Mumbai)
-   - Festivals/events (e.g., Eid Mubarak)
-   - Brands, apps, or tools (e.g., Digi Yatra, Wordle, Crossword)
-   - Fictional names or phrases
-   - Generic words that are not names
-
-2. For each valid person, extract:
-   - Full Name (ensure it looks like a real name)
-   - Designation (skip if not clearly mentioned)
-   - Company/Organization (skip if unclear)
-   - Quote (if any)
-   - Create a Google search link to find them on LinkedIn
-
-3. Avoid duplications. If the same person appears multiple times, include them only once — with the most complete and recent information.
-
-4. Ignore promotional or ad text — do NOT include names found in "sponsored", "ads", or promotional sections of the article.
-
-5. If you're unsure if a name is a person or not, do not include it.
-
-Respond in JSON format:
-[
-  {
-    "Name": "Full Name",
-    "Designation": "Role/Title",
-    "Company": "Organization",
-    "Quote": "Direct quote if available",
-    "LinkedIn": "https://www.google.com/search?q=LinkedIn+[Name]+[Company]"
-  }
-]
-"""
-
-def filter_insights(people_insights):
-    """Apply additional filtering to remove low-quality entries"""
-    filtered = []
-    for person in people_insights:
-        # Check if name has at least 2 words
-        name_parts = person["Name"].split()
-        if len(name_parts) < 2:
-            continue
-            
-        # Skip entries with unknown company AND designation
-        if person["Company"] == "Unknown" and person["Designation"] == "Unknown":
-            continue
-            
-        # Create LinkedIn search URL if missing
-        if "LinkedIn" not in person or not person["LinkedIn"]:
-            name_query = person["Name"].replace(" ", "+")
-            company_query = person["Company"].replace(" ", "+") if person["Company"] != "Unknown" else ""
-            person["LinkedIn"] = f"https://www.google.com/search?q=LinkedIn+{name_query}+{company_query}"
-            
-        filtered.append(person)
+def is_valid_name(name):
+    """Check if a name looks like a real person name"""
+    # Must have at least 2 words
+    if len(name.split()) < 2:
+        return False
     
-    return filtered
+    # Avoid common false positives
+    false_positives = [
+        'new delhi', 'navi mumbai', 'eid mubarak', 'digi yatra', 
+        'artificial intelligence', 'machine learning', 'data science',
+        'supreme court', 'high court', 'united states', 'new york',
+        'san francisco', 'hong kong', 'new jersey', 'wall street'
+    ]
+    
+    if name.lower() in false_positives:
+        return False
+    
+    # Check for common location indicators
+    location_indicators = ['street', 'road', 'avenue', 'boulevard', 'lane', 'drive', 'court', 'city', 'town']
+    if any(indicator in name.lower() for indicator in location_indicators):
+        return False
+    
+    return True
 
-def extract_people_with_gpt(text):
-    """Extract people information using GPT-3.5"""
-    if client is None:
-        return None
-        
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.2,
-            max_tokens=2000
-        )
-        
-        # Parse the response
-        content = response.choices[0].message.content
-        people_insights = json.loads(content)
-        
-        # Apply additional filtering
-        return filter_insights(people_insights)
-    except Exception as e:
-        st.error(f"Error processing with GPT-3.5: {str(e)}")
-        return None
+def extract_designation(context):
+    """Extract designation from context"""
+    designation_patterns = [
+        r"(CEO|Chief\s+[A-Za-z]+\s+Officer)",
+        r"(Managing Director|Director|MD)",
+        r"(President|Vice President|VP)",
+        r"(Head\s+of\s+[A-Za-z\s]+)",
+        r"(Senior|Jr\.|Sr\.|Junior|Senior)\s+[A-Za-z]+",
+        r"([A-Za-z]+\s+Manager)",
+        r"(Founder|Co-founder|Executive|Leader|Chairman)",
+        r"(Professor|Doctor|Dr\.|Prof\.)",
+        r"(Engineer|Architect|Analyst|Consultant)",
+        r"(Partner|Associate|Principal)"
+    ]
+    
+    for pattern in designation_patterns:
+        match = re.search(pattern, context, re.IGNORECASE)
+        if match:
+            return match.group(0)
+    return "Unknown"
 
-def extract_people_with_spacy(text, doc):
-    """Fallback extraction using spaCy with enhanced filtering"""
+def clean_company_name(name):
+    """Clean and validate company name"""
+    if not name or name.lower() in ['unknown', 'none', 'na', 'n/a']:
+        return "Unknown"
+    
+    # Remove common suffixes
+    suffixes = [' ltd', ' limited', ' inc', ' llc', ' corp', ' corporation']
+    cleaned = name
+    for suffix in suffixes:
+        cleaned = re.sub(f"{suffix}$", "", cleaned, flags=re.IGNORECASE)
+    
+    return cleaned.strip()
+
+def extract_quote(text, name, window=200):
+    """Extract quote around person mention"""
+    quotes = []
+    name_pos = text.lower().find(name.lower())
+    
+    if name_pos != -1:
+        start = max(0, name_pos - window)
+        end = min(len(text), name_pos + window)
+        context = text[start:end]
+        
+        # Find quotes in context
+        quote_matches = re.finditer(r'"([^"]+)"', context)
+        for match in quote_matches:
+            quotes.append(match.group(1))
+    
+    return quotes[0] if quotes else "No direct quote found"
+
+def extract_people_insights(text):
+    """Enhanced people extraction using spaCy and rules"""
+    doc = nlp(text)
     people_insights = []
     seen_names = set()
     
-    for ent in doc.ents:
-        if ent.label_ == 'PERSON' and ent.text.strip() and ent.text not in seen_names:
-            name = ent.text.strip()
-            if len(name.split()) < 2:  # Skip single word names
-                continue
-            
-            # Get surrounding context
-            start_idx = max(0, ent.start_char - 150)
-            end_idx = min(len(text), ent.end_char + 150)
-            context = text[start_idx:end_idx].strip()
-            
-            # Find organization
-            company = "Unknown"
-            for org in doc.ents:
-                if org.label_ == 'ORG' and abs(org.start - ent.start) < 10:
-                    company = org.text
-                    break
-            
-            # Extract quote if available
-            quote_match = re.search(r'"([^"]*)"', context)
-            quote = quote_match.group(1) if quote_match else "No direct quote found"
-            
-            # Create LinkedIn search URL
-            name_query = name.replace(" ", "+")
-            company_query = company.replace(" ", "+") if company != "Unknown" else ""
-            linkedin_url = f"https://www.google.com/search?q=LinkedIn+{name_query}+{company_query}"
-            
-            people_insights.append({
-                "Name": name,
-                "Designation": "Unknown",
-                "Company": company,
-                "Quote": quote,
-                "LinkedIn": linkedin_url
-            })
-            seen_names.add(name)
+    # Process each sentence for better context
+    for sent in doc.sents:
+        sent_doc = nlp(sent.text)
+        
+        for ent in sent_doc.ents:
+            if ent.label_ == 'PERSON':
+                name = ent.text.strip()
+                
+                # Validate name
+                if not is_valid_name(name) or name in seen_names:
+                    continue
+                
+                # Get context (+-200 characters)
+                start_idx = max(0, ent.start_char - 200)
+                end_idx = min(len(sent.text), ent.end_char + 200)
+                context = sent.text[start_idx:end_idx]
+                
+                # Extract designation
+                designation = extract_designation(context)
+                
+                # Find organization
+                company = "Unknown"
+                min_distance = float('inf')
+                for org in sent_doc.ents:
+                    if org.label_ == 'ORG':
+                        distance = abs(org.start - ent.start)
+                        if distance < min_distance and distance < 10:
+                            min_distance = distance
+                            company = clean_company_name(org.text)
+                
+                # Extract quote
+                quote = extract_quote(text, name)
+                
+                # Create LinkedIn search URL
+                name_query = name.replace(" ", "+")
+                company_query = company.replace(" ", "+") if company != "Unknown" else ""
+                linkedin_url = f"https://www.google.com/search?q=LinkedIn+{name_query}+{company_query}"
+                
+                # Add to insights
+                people_insights.append({
+                    "Name": name,
+                    "Designation": designation,
+                    "Company": company,
+                    "Quote": quote,
+                    "LinkedIn": linkedin_url
+                })
+                seen_names.add(name)
     
-    return filter_insights(people_insights)
+    return people_insights
 
 # Page title and description
 st.title("Link2People - AI People Insights")
 st.markdown("Extract detailed insights about people mentioned in any article")
-
-# Add OpenAI API key status indicator
-if "OPENAI_API_KEY" in st.secrets:
-    st.success("OpenAI API key found! Using GPT-3.5 for enhanced extraction.")
-else:
-    st.warning("OpenAI API key not found. Using basic extraction mode.")
 
 # URL input
 url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
@@ -220,14 +200,7 @@ if st.button("Analyze"):
 
             # Analyze content
             with st.spinner("Analyzing people mentions..."):
-                # Try GPT-3.5 first
-                people_insights = extract_people_with_gpt(text)
-                
-                # Fallback to spaCy if GPT-3.5 fails
-                if people_insights is None:
-                    st.info("Using fallback extraction method...")
-                    doc = nlp(text[:1000000])
-                    people_insights = extract_people_with_spacy(text, doc)
+                people_insights = extract_people_insights(text)
 
             # Display results
             if people_insights:
