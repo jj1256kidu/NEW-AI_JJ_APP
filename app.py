@@ -21,12 +21,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Must be the first Streamlit command
 st.set_page_config(
-    page_title="NewsNex - From News to Next Opportunities",
+    page_title="NewsNex – From News to Next Opportunities",
     page_icon="🎯",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for styling with new background
+# Custom CSS for styling
 st.markdown("""
 <style>
     /* Modern Gradient Background */
@@ -71,26 +72,29 @@ st.markdown("""
     }
     
     .main-title {
-        font-size: 3rem;
+        font-size: 3.5rem;
         font-weight: bold;
         color: #00FFD1;
-        margin-bottom: 0;
-        text-shadow: 0 0 10px rgba(0, 255, 209, 0.5);
+        margin-bottom: 0.5rem;
+        text-shadow: 0 0 15px rgba(0, 255, 209, 0.5);
+        text-align: center;
     }
     
     .tagline {
-        font-size: 1.4rem;
+        font-size: 1.8rem;
         color: #00A3FF;
         margin-bottom: 0.5rem;
-        text-shadow: 0 0 8px rgba(0, 163, 255, 0.5);
+        text-shadow: 0 0 12px rgba(0, 163, 255, 0.5);
+        text-align: center;
     }
     
     .sub-tagline {
-        font-size: 1.2rem;
+        font-size: 1.4rem;
         color: #8F00FF;
         font-style: italic;
-        margin-bottom: 1rem;
-        text-shadow: 0 0 8px rgba(143, 0, 255, 0.5);
+        margin-bottom: 2rem;
+        text-shadow: 0 0 10px rgba(143, 0, 255, 0.5);
+        text-align: center;
     }
     
     .stButton > button {
@@ -100,6 +104,8 @@ st.markdown("""
         font-weight: bold;
         border: none;
         transition: all 0.3s ease;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
     }
     
     .stButton > button:hover {
@@ -119,6 +125,7 @@ st.markdown("""
         box-shadow: 0 8px 32px rgba(0, 255, 209, 0.1);
         border: 1px solid rgba(0, 255, 209, 0.1);
         transition: all 0.3s ease;
+        margin: 1rem 0;
     }
     
     .metric-card:hover {
@@ -155,6 +162,7 @@ st.markdown("""
         border-radius: 8px;
         color: #00FFD1;
         transition: all 0.3s ease;
+        padding: 0 2rem;
     }
     
     .stTabs [data-baseweb="tab"]:hover {
@@ -173,6 +181,7 @@ st.markdown("""
         backdrop-filter: blur(10px);
         border-radius: 10px;
         border: 1px solid rgba(0, 255, 209, 0.1);
+        color: white;
     }
     
     /* Input fields styling */
@@ -180,15 +189,33 @@ st.markdown("""
         background: rgba(26, 31, 56, 0.7);
         border: 1px solid rgba(0, 255, 209, 0.3);
         border-radius: 8px;
+        color: white;
     }
     
     .stTextArea > div > div {
         background: rgba(26, 31, 56, 0.7);
         border: 1px solid rgba(0, 255, 209, 0.3);
         border-radius: 8px;
+        color: white;
+    }
+    
+    .footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 1rem;
+        background: rgba(26, 31, 56, 0.9);
+        backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(0, 255, 209, 0.1);
+        text-align: center;
+        color: #00FFD1;
+        font-size: 1.1rem;
+        z-index: 1000;
     }
 </style>
 """, unsafe_allow_html=True)
+
 @st.cache_resource(show_spinner=False)
 def load_nlp_model():
     try:
@@ -203,42 +230,67 @@ class ProfileExtractor:
         self.nlp = load_nlp_model()
         # Extended invalid terms
         self.invalid_terms = {
-            'navratri', 'eid', 'diwali', 'christmas', 'new year',
-            'asia', 'germany', 'mumbai', 'delhi', 'bangalore', 'india', 'china',
-            'digi yatra', 'free fire', 'wordle', 'android', 'ios',
-            'top stocks', 'fire max', 'breaking news', 'latest news',
-            'read more', 'share market', 'stock market', 'monday', 'tuesday',
-            'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
+            # Places
+            'asia', 'europe', 'america', 'africa', 'australia',
+            'india', 'china', 'japan', 'usa', 'uk', 'germany',
+            'mumbai', 'delhi', 'bangalore', 'hyderabad', 'chennai',
+            'kolkata', 'pune', 'ahmedabad', 'london', 'new york',
+            # Days and Months
+            'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+            'january', 'february', 'march', 'april', 'may', 'june',
+            # Common terms
+            'news', 'latest', 'breaking', 'update', 'report',
+            'market', 'stock', 'shares', 'price', 'rates',
+            'today', 'yesterday', 'tomorrow', 'week', 'month',
         }
         
-        self.name_prefixes = {
-            'mr', 'mrs', 'ms', 'dr', 'prof', 'sir', 'er', 'eng',
-            'advocate', 'justice', 'honorable', 'shri', 'smt'
-        }
-        
-        self.professional_contexts = {
-            'ceo', 'chief', 'president', 'director', 'head', 'vp', 'vice president',
-            'founder', 'co-founder', 'chairman', 'managing director', 'md', 'cto',
-            'engineer', 'architect', 'leader', 'executive', 'manager', 'principal',
-            'partner', 'associate', 'advisor', 'consultant', 'strategist', 'analyst',
-            'lead', 'head', 'specialist', 'expert', 'professional'
+        # Enhanced professional context markers
+        self.professional_markers = {
+            # Leadership titles
+            'ceo', 'cto', 'cfo', 'coo', 'cio', 'president',
+            'vice president', 'vp', 'svp', 'evp', 'avp',
+            'managing director', 'director', 'md', 'chairman',
+            'chairperson', 'board member',
+            # Management roles
+            'head', 'manager', 'senior manager', 'general manager',
+            'project manager', 'program manager', 'product manager',
+            # Technical roles
+            'engineer', 'architect', 'developer', 'analyst',
+            'scientist', 'researcher', 'specialist',
+            # Other professional roles
+            'consultant', 'advisor', 'strategist', 'partner',
+            'associate', 'professional', 'executive'
         }
 
     def get_clean_text_from_url(self, url):
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Connection': 'keep-alive',
             }
-            response = requests.get(url, headers=headers, verify=False, timeout=15)
+            # Try different request methods
+            try:
+                response = requests.get(url, headers=headers, verify=False, timeout=15)
+            except:
+                session = requests.Session()
+                response = session.get(url, headers=headers, verify=False, timeout=15)
+            
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove unwanted elements
-            for element in soup(['script', 'style', 'aside', 'nav', 'footer', 'iframe', 'header']):
+            for element in soup(['script', 'style', 'aside', 'nav', 'footer', 'iframe', 'header', 'meta', 'link']):
                 element.decompose()
             
-            # Get text content
-            text = ' '.join([p.get_text() for p in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
+            # Get text from article-specific tags first
+            article_content = soup.find_all(['article', 'main', '[class*="article"]', '[class*="content"]'])
+            if article_content:
+                text = ' '.join([p.get_text() for p in article_content])
+            else:
+                # Fallback to regular paragraph tags
+                text = ' '.join([p.get_text() for p in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
             
             # Clean text
             text = re.sub(r'\s+', ' ', text)
@@ -247,29 +299,33 @@ class ProfileExtractor:
         except Exception as e:
             raise Exception(f"Error fetching URL: {str(e)}")
 
-    def is_valid_name(self, name):
+    def is_valid_name(self, name, context):
         if not name or len(name) < 2 or len(name) > 40:
             return False
         
         name_lower = name.lower()
         
+        # Check for invalid terms
         if any(term in name_lower for term in self.invalid_terms):
             return False
-        
-        has_valid_context = any(prefix in name_lower for prefix in self.name_prefixes) or \
-                          any(context in name_lower for context in self.professional_contexts)
         
         words = name.split()
         if len(words) < 2:
             return False
         
+        # Check capitalization
         if not all(word[0].isupper() for word in words if word):
             return False
         
+        # Check for numbers or special characters
         if re.search(r'[0-9@#$%^&*()_+=\[\]{};:"|<>?]', name):
             return False
         
-        return True
+        # Check if name appears in a professional context
+        context_lower = context.lower()
+        has_professional_context = any(marker in context_lower for marker in self.professional_markers)
+        
+        return has_professional_context
 
     def extract_designation(self, text):
         designation_patterns = [
@@ -280,6 +336,7 @@ class ProfileExtractor:
             r'(?i)(Head\s+of\s+[A-Za-z\s]+)',
             r'(?i)(Senior\s+[A-Za-z]+\s+Manager|Manager)',
             r'(?i)(Lead\s+[A-Za-z]+|Team\s+Lead)',
+            r'(?i)(Senior\s+[A-Za-z]+|Principal\s+[A-Za-z]+)',
         ]
         
         designations = []
@@ -294,7 +351,7 @@ class ProfileExtractor:
 
     def extract_company(self, text):
         company_patterns = [
-            r'(?i)(?:at|with|for|in)\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP)?)',
+            r'(?i)(?:at|with|for|in|of)\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP)?)',
             r'(?i)([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP))',
         ]
         
@@ -311,36 +368,41 @@ class ProfileExtractor:
     def extract_profiles(self, text):
         doc = self.nlp(text)
         profiles = []
+        seen_names = set()
         
         for ent in doc.ents:
             if ent.label_ == "PERSON":
                 name = ent.text.strip()
                 
-                if self.is_valid_name(name):
-                    start = max(0, ent.start_char - 100)
-                    end = min(len(text), ent.end_char + 100)
-                    context = text[start:end]
-                    
+                # Get broader context
+                start = max(0, ent.start_char - 200)
+                end = min(len(text), ent.end_char + 200)
+                context = text[start:end]
+                
+                if name not in seen_names and self.is_valid_name(name, context):
                     designations = self.extract_designation(context)
                     companies = self.extract_company(context)
                     
-                    linkedin_url = f"https://www.linkedin.com/search/results/people/?keywords={name.replace(' ', '%20')}"
-                    
-                    profile = {
-                        "name": name,
-                        "designations": designations,
-                        "companies": companies,
-                        "linkedin_search": linkedin_url
-                    }
-                    
-                    profiles.append(profile)
+                    if designations or companies:
+                        linkedin_url = f"https://www.linkedin.com/search/results/people/?keywords={name.replace(' ', '%20')}"
+                        
+                        profile = {
+                            "name": name,
+                            "designations": designations,
+                            "companies": companies,
+                            "linkedin_search": linkedin_url
+                        }
+                        
+                        profiles.append(profile)
+                        seen_names.add(name)
         
         return profiles
 
 def main():
-    st.markdown('<h1 class="main-title">NewsNex</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="tagline">From News to Next Opportunities</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-tagline">Extract professional profiles from news articles</p>', unsafe_allow_html=True)
+    # Updated branding section
+    st.markdown('<h1 class="main-title">🧠 NewsNex 📰</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="tagline">Smarter Prospecting Starts with News ⚡</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-tagline">Where News Sparks the Next Deal 🎯</p>', unsafe_allow_html=True)
 
     tab1, tab2 = st.tabs(["📰 URL Input", "📝 Text Input"])
 
@@ -433,6 +495,16 @@ def display_results(extractor, text, profiles):
             )
     else:
         st.info("🔍 No profiles found in the provided content.")
+
+    # Footer
+    st.markdown(
+        """
+        <div class='footer'>
+            Made with ❤️ by NewsNex | Transform News into Opportunities
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
