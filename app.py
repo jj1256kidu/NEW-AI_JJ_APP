@@ -36,13 +36,19 @@ class ProfileExtractor:
 
     def get_clean_text_from_url(self, url):
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
         }
         
         try:
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
 
+            # Fetch content
             response = requests.get(
                 url, 
                 headers=headers, 
@@ -50,27 +56,51 @@ class ProfileExtractor:
                 verify=False
             )
             response.raise_for_status()
+            
+            # Parse HTML
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove unwanted elements
-            for element in soup(['script', 'style', 'nav', 'footer', 'iframe']):
+            for element in soup(['script', 'style', 'nav', 'footer', 'iframe', 'header', 'aside', 'meta']):
                 element.decompose()
+            
+            # Try multiple methods to find content
+            text = ""
+            
+            # Method 1: Look for article content
+            article = soup.find('article')
+            if article:
+                text = article.get_text(separator=' ', strip=True)
+            
+            # Method 2: Look for main content
+            if not text:
+                main_content = soup.find(['main', 'div'], class_=re.compile(r'content|article|post|story|body', re.I))
+                if main_content:
+                    text = main_content.get_text(separator=' ', strip=True)
+            
+            # Method 3: Look for paragraphs
+            if not text:
+                paragraphs = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+                text = ' '.join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
+            
+            # Method 4: Get all text if nothing else worked
+            if not text:
+                text = soup.get_text(separator=' ', strip=True)
+            
+            # Clean the text
+            text = re.sub(r'\s+', ' ', text)  # Remove extra whitespace
+            text = re.sub(r'[^\w\s\'-]', ' ', text)  # Keep only valid characters
+            text = ' '.join(word for word in text.split() if len(word) > 1)  # Remove single characters
+            
+            # Debug info
+            if not text:
+                st.warning("Debug: No text extracted from the webpage")
+                return ""
                 
-            # Remove ads and promotional content
-            for element in soup.find_all(class_=re.compile(r'ad|promo|banner|sidebar')):
-                element.decompose()
-            
-            # Extract text from paragraphs and headers
-            text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article'])
-            text = ' '.join(elem.get_text(strip=True) for elem in text_elements)
-            
-            # Clean text
-            text = re.sub(r'\s+', ' ', text)
-            text = re.sub(r'[^\w\s\'-]', ' ', text)
-            
             return text.strip()
             
         except Exception as e:
+            st.error(f"Debug: Error in get_clean_text_from_url: {str(e)}")
             raise Exception(f"Error fetching URL: {str(e)}")
 
     def is_valid_name(self, name):
@@ -95,14 +125,15 @@ class ProfileExtractor:
 
     def extract_designation(self, text):
         patterns = [
-            r"(?:is|was|as)\s+(?:the\s+)?(?:CEO|Chief|President|Director|Head|VP|Vice President|Founder)",
-            r"(?:Senior|Global|Regional)?\s*(?:Director|Manager|Lead|Head|Chief|Officer)\s+(?:of|for|at)",
+            r"(?:is|was|as)\s+(?:the\s+)?(?:new\s+)?([A-Z][a-z]+\s+)?(?:CEO|Chief|President|Director|Head|VP|Vice President|Founder|Executive)",
+            r"(?:Senior|Global|Regional)?\s*(?:Director|Manager|Lead|Head|Chief|Officer)\s+(?:of|for|at)\s+[A-Z][A-Za-z\s]+",
             r"(?:CEO|CTO|CIO|CFO|COO|CHRO|CMO)\s+(?:and|&)?\s*(?:Co-founder|Founder|Director|President)?",
-            r"(?:Managing|Executive|General)\s+(?:Director|Partner|Manager|Principal)"
+            r"(?:Managing|Executive|General)\s+(?:Director|Partner|Manager|Principal)",
+            r"(?:Technical|Technology|Product|Program|Project)\s+(?:Director|Manager|Lead|Head|Architect)"
         ]
         
         for pattern in patterns:
-            match = re.search(pattern, text)
+            match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 return match.group(0).strip()
         return ""
@@ -111,7 +142,8 @@ class ProfileExtractor:
         patterns = [
             r"(?:at|of|for|with)\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
             r"joined\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
-            r"([A-Z][A-Za-z0-9\s&]+?)(?:'s|')\s+(?:CEO|Chief|President|Director)"
+            r"([A-Z][A-Za-z0-9\s&]+?)(?:'s|')\s+(?:CEO|Chief|President|Director)",
+            r"(?:works|working)\s+(?:at|for|with)\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)"
         ]
         
         for pattern in patterns:
@@ -178,11 +210,18 @@ def main():
             with st.spinner("Fetching and analyzing article..."):
                 extractor = ProfileExtractor()
                 
+                # Get article text
                 text = extractor.get_clean_text_from_url(url)
                 if not text:
                     st.warning("No readable content found in the article.")
+                    st.write("Debug: Please check if the URL is accessible and contains article content.")
                     return
+                
+                # Show extracted text for debugging (can be removed in production)
+                with st.expander("Show extracted text"):
+                    st.text(text[:500] + "...")
                     
+                # Extract profiles
                 profiles = extractor.extract_profiles(text)
                 
                 if profiles:
