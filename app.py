@@ -7,44 +7,24 @@ st.set_page_config(
     layout="wide"
 )
 
-import os
-import sys
+import spacy
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import re
 import json
-import importlib
 
-# Initialize spaCy with better error handling
+# Initialize spaCy
 @st.cache_resource
-def initialize_spacy():
+def load_model():
     try:
-        import spacy
-        try:
-            nlp = spacy.load('en_core_web_sm')
-            return nlp
-        except OSError:
-            st.info("Installing spaCy model...")
-            try:
-                os.system(f"{sys.executable} -m pip install en-core-web-sm==3.7.1")
-                nlp = spacy.load('en_core_web_sm')
-                return nlp
-            except Exception as e:
-                st.error(f"Failed to install spaCy model: {str(e)}")
-                return None
+        return spacy.load("en_core_web_sm")
     except Exception as e:
-        st.error(f"Error initializing spaCy: {str(e)}")
+        st.error(f"Error loading spaCy model: {str(e)}")
         return None
 
-# Import remaining packages
-try:
-    import pandas as pd
-    import requests
-    from bs4 import BeautifulSoup
-    import re
-except ImportError as e:
-    st.error(f"Failed to import required packages: {str(e)}")
-    st.stop()
-
 # Load NLP model
-nlp = initialize_spacy()
+nlp = load_model()
 
 if nlp is None:
     st.error("Failed to load NLP model. Please try refreshing the page.")
@@ -54,32 +34,12 @@ if nlp is None:
 st.title("Link2People - AI People Insights")
 st.markdown("Extract detailed insights about people mentioned in any article")
 
-# Custom styling
-st.markdown("""
-    <style>
-    .stTextInput > div > div > input {
-        border-radius: 10px;
-    }
-    .stButton > button {
-        border-radius: 10px;
-        width: 100%;
-    }
-    .person-card {
-        padding: 1rem;
-        border-radius: 10px;
-        border: 1px solid #ddd;
-        margin: 0.5rem 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 def extract_quote_around_name(text, name, window=100):
     """Extract a relevant quote around the person's name"""
     name_pos = text.find(name)
     if name_pos == -1:
         return None
     
-    # Find the nearest quotation marks
     start = max(0, name_pos - window)
     end = min(len(text), name_pos + window)
     context = text[start:end]
@@ -98,20 +58,16 @@ def extract_context(text, name, window=150):
     start = max(0, name_pos - window)
     end = min(len(text), name_pos + window)
     context = text[start:end].strip()
-    
-    # Clean up the context
-    context = re.sub(r'\s+', ' ', context)
-    return context
+    return re.sub(r'\s+', ' ', context)
 
 def get_designation(doc, ent):
     """Extract designation from surrounding text"""
     title_patterns = [
-        r"(CEO|Chief\s+[A-Za-z]+\s+Officer|President|Director|Manager|Head\s+of\s+[A-Za-z]+|VP|Vice\s+President|Founder|Co-founder|Executive|Leader|Chairman|Managing Director|Partner|Associate|Analyst|Consultant|Engineer|Developer|Architect|Specialist)",
+        r"(CEO|Chief\s+[A-Za-z]+\s+Officer|President|Director|Manager|Head\s+of\s+[A-Za-z]+|VP|Vice\s+President|Founder|Co-founder|Executive|Leader|Chairman|Managing Director)",
         r"(Professor|Doctor|Dr\.|Prof\.|Senior|Junior|Principal|Assistant|Associate)\s+[A-Za-z]+",
         r"[A-Za-z]+\s+(Manager|Director|Lead|Head|Chief|Officer)"
     ]
     
-    # Get context around the entity
     start_idx = max(0, ent.start_char - 100)
     end_idx = min(len(doc.text), ent.end_char + 100)
     context = doc.text[start_idx:end_idx]
@@ -119,9 +75,7 @@ def get_designation(doc, ent):
     for pattern in title_patterns:
         matches = re.finditer(pattern, context, re.IGNORECASE)
         for match in matches:
-            # Check if the title is close to the name
-            title_pos = match.start()
-            if abs(title_pos - (ent.start_char - start_idx)) < 50:
+            if abs(match.start() - (ent.start_char - start_idx)) < 50:
                 return match.group(0)
     
     return "Unknown"
@@ -147,7 +101,6 @@ if st.button("Analyze"):
                 response.raise_for_status()
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # Extract text from relevant HTML elements
                 text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'])
                 text = ' '.join([elem.get_text(strip=True) for elem in text_elements])
 
@@ -163,22 +116,18 @@ if st.button("Analyze"):
                 
                 for ent in doc.ents:
                     if ent.label_ == 'PERSON' and ent.text.strip() and ent.text not in seen_names:
-                        # Basic name validation
                         name = ent.text.strip()
                         if len(name.split()) < 2:  # Skip single word names
                             continue
                         
-                        # Get designation
                         designation = get_designation(doc, ent)
                         
-                        # Find organization
                         company = "Unknown"
                         for org in doc.ents:
                             if org.label_ == 'ORG' and abs(org.start - ent.start) < 10:
                                 company = org.text
                                 break
                         
-                        # Extract quote and context
                         quote = extract_quote_around_name(text, name)
                         context = extract_context(text, name)
                         
@@ -225,7 +174,6 @@ if st.button("Analyze"):
                 # Export options
                 col1, col2 = st.columns(2)
                 with col1:
-                    # Export as CSV
                     csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="Download CSV",
@@ -234,7 +182,6 @@ if st.button("Analyze"):
                         mime="text/csv"
                     )
                 with col2:
-                    # Export as JSON
                     json_str = json.dumps(people_insights, indent=2)
                     st.download_button(
                         label="Download JSON",
