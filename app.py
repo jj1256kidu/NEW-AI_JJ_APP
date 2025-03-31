@@ -1,15 +1,15 @@
 import streamlit as st
 
-# Must be the first Streamlit command - removed theme argument that was causing the error
+# Must be the first Streamlit command
 st.set_page_config(
-    page_title="Link2People",
-    page_icon="🔍",
+    page_title="Link2People - AI People Insights",
+    page_icon="👥",
     layout="wide"
 )
 
 import os
 import sys
-import subprocess
+import json
 import importlib
 
 # Initialize spaCy with better error handling
@@ -18,13 +18,11 @@ def initialize_spacy():
     try:
         import spacy
         try:
-            # Try to load the model directly first
             nlp = spacy.load('en_core_web_sm')
             return nlp
         except OSError:
             st.info("Installing spaCy model...")
             try:
-                # Install the model using pip directly
                 os.system(f"{sys.executable} -m pip install en-core-web-sm==3.7.1")
                 nlp = spacy.load('en_core_web_sm')
                 return nlp
@@ -53,8 +51,8 @@ if nlp is None:
     st.stop()
 
 # Page title and description
-st.title("Link2People - AI People Extractor")
-st.markdown("Extract people information from any webpage")
+st.title("Link2People - AI People Insights")
+st.markdown("Extract detailed insights about people mentioned in any article")
 
 # Custom styling
 st.markdown("""
@@ -66,11 +64,70 @@ st.markdown("""
         border-radius: 10px;
         width: 100%;
     }
+    .person-card {
+        padding: 1rem;
+        border-radius: 10px;
+        border: 1px solid #ddd;
+        margin: 0.5rem 0;
+    }
     </style>
     """, unsafe_allow_html=True)
 
+def extract_quote_around_name(text, name, window=100):
+    """Extract a relevant quote around the person's name"""
+    name_pos = text.find(name)
+    if name_pos == -1:
+        return None
+    
+    # Find the nearest quotation marks
+    start = max(0, name_pos - window)
+    end = min(len(text), name_pos + window)
+    context = text[start:end]
+    
+    quote_match = re.search(r'"([^"]*)"', context)
+    if quote_match:
+        return quote_match.group(1)
+    return None
+
+def extract_context(text, name, window=150):
+    """Extract relevant context around the person's mention"""
+    name_pos = text.find(name)
+    if name_pos == -1:
+        return None
+    
+    start = max(0, name_pos - window)
+    end = min(len(text), name_pos + window)
+    context = text[start:end].strip()
+    
+    # Clean up the context
+    context = re.sub(r'\s+', ' ', context)
+    return context
+
+def get_designation(doc, ent):
+    """Extract designation from surrounding text"""
+    title_patterns = [
+        r"(CEO|Chief\s+[A-Za-z]+\s+Officer|President|Director|Manager|Head\s+of\s+[A-Za-z]+|VP|Vice\s+President|Founder|Co-founder|Executive|Leader|Chairman|Managing Director|Partner|Associate|Analyst|Consultant|Engineer|Developer|Architect|Specialist)",
+        r"(Professor|Doctor|Dr\.|Prof\.|Senior|Junior|Principal|Assistant|Associate)\s+[A-Za-z]+",
+        r"[A-Za-z]+\s+(Manager|Director|Lead|Head|Chief|Officer)"
+    ]
+    
+    # Get context around the entity
+    start_idx = max(0, ent.start_char - 100)
+    end_idx = min(len(doc.text), ent.end_char + 100)
+    context = doc.text[start_idx:end_idx]
+    
+    for pattern in title_patterns:
+        matches = re.finditer(pattern, context, re.IGNORECASE)
+        for match in matches:
+            # Check if the title is close to the name
+            title_pos = match.start()
+            if abs(title_pos - (ent.start_char - start_idx)) < 50:
+                return match.group(0)
+    
+    return "Unknown"
+
 # URL input
-url = st.text_input("Enter webpage URL:", placeholder="https://example.com/article")
+url = st.text_input("Enter article URL:", placeholder="https://example.com/article")
 
 if st.button("Analyze"):
     if not url:
@@ -82,7 +139,7 @@ if st.button("Analyze"):
                 url = 'https://' + url
 
             # Fetch webpage content
-            with st.spinner("Fetching webpage content..."):
+            with st.spinner("Fetching article content..."):
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124'
                 }
@@ -95,91 +152,101 @@ if st.button("Analyze"):
                 text = ' '.join([elem.get_text(strip=True) for elem in text_elements])
 
                 if not text.strip():
-                    st.warning("No readable content found on the webpage.")
+                    st.warning("No readable content found in the article.")
                     st.stop()
 
             # Analyze content
-            with st.spinner("Analyzing content..."):
+            with st.spinner("Analyzing people mentions..."):
                 doc = nlp(text[:1000000])  # Limit text length to prevent memory issues
-                results = []
+                people_insights = []
                 seen_names = set()
                 
-                # Enhanced title patterns
-                title_pattern = r"(CEO|Chief\s+[A-Za-z]+\s+Officer|President|Director|Manager|Head\s+of\s+[A-Za-z]+|VP|Vice\s+President|Founder|Co-founder|Executive|Leader)"
-                
-                # Process entities
                 for ent in doc.ents:
                     if ent.label_ == 'PERSON' and ent.text.strip() and ent.text not in seen_names:
-                        # Get surrounding context
-                        start_idx = max(0, ent.start_char - 150)
-                        end_idx = min(len(text), ent.end_char + 150)
-                        context = text[start_idx:end_idx]
+                        # Basic name validation
+                        name = ent.text.strip()
+                        if len(name.split()) < 2:  # Skip single word names
+                            continue
                         
-                        # Extract title
-                        titles = re.findall(title_pattern, context, re.IGNORECASE)
-                        title = titles[0] if titles else 'Unknown'
+                        # Get designation
+                        designation = get_designation(doc, ent)
                         
-                        # Find closest organization
-                        company = 'Unknown'
-                        min_distance = float('inf')
+                        # Find organization
+                        company = "Unknown"
                         for org in doc.ents:
-                            if org.label_ == 'ORG':
-                                distance = abs(org.start - ent.start)
-                                if distance < min_distance and distance < 10:
-                                    min_distance = distance
-                                    company = org.text
+                            if org.label_ == 'ORG' and abs(org.start - ent.start) < 10:
+                                company = org.text
+                                break
                         
-                        # Create LinkedIn search URL
-                        linkedin_url = f"https://www.linkedin.com/search/results/people/?keywords={ent.text.replace(' ', '%20')}"
-                        if company != 'Unknown':
-                            linkedin_url += f"%20{company.replace(' ', '%20')}"
+                        # Extract quote and context
+                        quote = extract_quote_around_name(text, name)
+                        context = extract_context(text, name)
                         
-                        results.append({
-                            'Name': ent.text,
-                            'Title': title,
-                            'Company': company,
-                            'LinkedIn': linkedin_url
+                        people_insights.append({
+                            "Name": name,
+                            "Designation": designation,
+                            "Company": company,
+                            "Quote": quote if quote else "No direct quote found",
+                            "Context": context if context else "No additional context found"
                         })
-                        seen_names.add(ent.text)
+                        seen_names.add(name)
 
             # Display results
-            if results:
-                df = pd.DataFrame(results)
+            if people_insights:
+                st.success(f"Found {len(people_insights)} people mentioned in the article!")
                 
-                # Success message and metrics
-                st.success(f"Successfully analyzed the webpage!")
-                
+                # Display metrics
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("People Found", len(results))
+                    st.metric("People Found", len(people_insights))
                 with col2:
-                    st.metric("Companies Mentioned", len(df['Company'].unique()))
+                    st.metric("With Quotes", len([p for p in people_insights if p["Quote"] != "No direct quote found"]))
                 with col3:
-                    st.metric("Known Titles", len(df[df['Title'] != 'Unknown']))
+                    st.metric("With Titles", len([p for p in people_insights if p["Designation"] != "Unknown"]))
                 
-                # Display results table
+                # Display detailed insights
+                st.subheader("Detailed People Insights")
+                df = pd.DataFrame(people_insights)
+                
+                # Display as interactive table
                 st.dataframe(
                     df,
                     column_config={
-                        "LinkedIn": st.column_config.LinkColumn("LinkedIn Profile")
+                        "Name": st.column_config.TextColumn("Name", width="medium"),
+                        "Designation": st.column_config.TextColumn("Designation", width="medium"),
+                        "Company": st.column_config.TextColumn("Company", width="medium"),
+                        "Quote": st.column_config.TextColumn("Quote", width="large"),
+                        "Context": st.column_config.TextColumn("Context", width="large")
                     },
                     hide_index=True,
                     use_container_width=True
                 )
                 
-                # Download options
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Download CSV",
-                    data=csv,
-                    file_name="extracted_people.csv",
-                    mime="text/csv"
-                )
+                # Export options
+                col1, col2 = st.columns(2)
+                with col1:
+                    # Export as CSV
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv,
+                        file_name="people_insights.csv",
+                        mime="text/csv"
+                    )
+                with col2:
+                    # Export as JSON
+                    json_str = json.dumps(people_insights, indent=2)
+                    st.download_button(
+                        label="Download JSON",
+                        data=json_str,
+                        file_name="people_insights.json",
+                        mime="application/json"
+                    )
             else:
-                st.info("No people were found in the provided webpage.")
+                st.info("No people were found in the article.")
                 
         except requests.exceptions.RequestException as e:
-            st.error(f"Error fetching the webpage: {str(e)}")
+            st.error(f"Error fetching the article: {str(e)}")
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
 
