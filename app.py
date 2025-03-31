@@ -5,7 +5,10 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import re
-from typing import List, Dict, Any
+import urllib3
+
+# Disable SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Must be the first Streamlit command
 st.set_page_config(
@@ -30,15 +33,22 @@ class ProfileExtractor:
             'navratri', 'eid', 'diwali', 'asia', 'germany', 'mumbai', 'delhi',
             'digi yatra', 'free fire', 'wordle', 'top stocks', 'fire max'
         }
-        
-    def get_clean_text_from_url(self, url: str) -> str:
-        """Fetch and clean text content from URL"""
+
+    def get_clean_text_from_url(self, url):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+
+            response = requests.get(
+                url, 
+                headers=headers, 
+                timeout=15,
+                verify=False
+            )
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
@@ -63,8 +73,7 @@ class ProfileExtractor:
         except Exception as e:
             raise Exception(f"Error fetching URL: {str(e)}")
 
-    def is_valid_name(self, name: str) -> bool:
-        """Validate if string is a proper person name"""
+    def is_valid_name(self, name):
         if not name or len(name) < 5:
             return False
             
@@ -72,26 +81,22 @@ class ProfileExtractor:
         if len(words) < 2:
             return False
             
-        # Check for at least 2 capitalized words
         caps = sum(1 for w in words if w and w[0].isupper())
         if caps < 2:
             return False
             
-        # Check against invalid terms
         if name.lower() in self.invalid_terms:
             return False
             
-        # No numbers or special chars except hyphen and apostrophe
         if re.search(r'[^a-zA-Z\s\'-]', name):
             return False
             
         return True
 
-    def extract_designation(self, text: str, window: int = 100) -> str:
-        """Extract professional designation from text"""
+    def extract_designation(self, text):
         patterns = [
-            r"(?:is|was|as)\s+(?:the\s+)?([A-Z][a-z]+\s+)?(?:CEO|Chief|President|Director|Head|VP|Vice President|Founder)",
-            r"(?:Senior|Global|Regional)?\s*(?:Director|Manager|Lead|Head|Chief|Officer)\s+(?:of|for|at)\s+[A-Z][A-Za-z\s]+",
+            r"(?:is|was|as)\s+(?:the\s+)?(?:CEO|Chief|President|Director|Head|VP|Vice President|Founder)",
+            r"(?:Senior|Global|Regional)?\s*(?:Director|Manager|Lead|Head|Chief|Officer)\s+(?:of|for|at)",
             r"(?:CEO|CTO|CIO|CFO|COO|CHRO|CMO)\s+(?:and|&)?\s*(?:Co-founder|Founder|Director|President)?",
             r"(?:Managing|Executive|General)\s+(?:Director|Partner|Manager|Principal)"
         ]
@@ -102,8 +107,7 @@ class ProfileExtractor:
                 return match.group(0).strip()
         return ""
 
-    def extract_company(self, text: str) -> str:
-        """Extract company name from text"""
+    def extract_company(self, text):
         patterns = [
             r"(?:at|of|for|with)\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
             r"joined\s+([A-Z][A-Za-z0-9\s&]+?)(?:\.|\s|$)",
@@ -118,8 +122,7 @@ class ProfileExtractor:
                     return company
         return ""
 
-    def extract_profiles(self, text: str) -> List[Dict[str, Any]]:
-        """Extract professional profiles from text"""
+    def extract_profiles(self, text):
         doc = self.nlp(text)
         profiles = {}
         
@@ -128,7 +131,6 @@ class ProfileExtractor:
                 name = ent.text.strip()
                 
                 if self.is_valid_name(name):
-                    # Get surrounding context
                     start = max(0, ent.start_char - 200)
                     end = min(len(text), ent.end_char + 200)
                     context = text[start:end]
@@ -145,13 +147,11 @@ class ProfileExtractor:
                                 "LinkedIn Search": ""
                             }
                         else:
-                            # Update with new info if found
                             if designation and not profiles[name]["Designation"]:
                                 profiles[name]["Designation"] = designation
                             if company and not profiles[name]["Company"]:
                                 profiles[name]["Company"] = company
         
-        # Format profiles and create LinkedIn search URLs
         results = []
         for name, profile in profiles.items():
             search_terms = [name]
@@ -178,20 +178,16 @@ def main():
             with st.spinner("Fetching and analyzing article..."):
                 extractor = ProfileExtractor()
                 
-                # Get article text
                 text = extractor.get_clean_text_from_url(url)
                 if not text:
                     st.warning("No readable content found in the article.")
                     return
                     
-                # Extract profiles
                 profiles = extractor.extract_profiles(text)
                 
                 if profiles:
-                    # Convert to DataFrame
                     df = pd.DataFrame(profiles)
                     
-                    # Display metrics
                     col1, col2 = st.columns(2)
                     with col1:
                         st.metric("Profiles Found", len(df))
@@ -199,7 +195,6 @@ def main():
                         complete = len(df[df["Designation"].astype(bool) & df["Company"].astype(bool)])
                         st.metric("Complete Profiles", complete)
                     
-                    # Display results
                     st.subheader("Extracted Profiles")
                     st.dataframe(
                         df,
@@ -213,12 +208,11 @@ def main():
                         use_container_width=True
                     )
                     
-                    # Export options
                     col1, col2 = st.columns(2)
                     with col1:
                         csv = df.to_csv(index=False).encode('utf-8')
                         st.download_button(
-                            "📥 Download CSV",
+                            "Download CSV",
                             csv,
                             "professional_profiles.csv",
                             "text/csv"
@@ -226,7 +220,7 @@ def main():
                     with col2:
                         json_str = df.to_json(orient="records", indent=2)
                         st.download_button(
-                            "📥 Download JSON",
+                            "Download JSON",
                             json_str,
                             "professional_profiles.json",
                             "application/json"
@@ -236,6 +230,9 @@ def main():
                     
         except Exception as e:
             st.error(f"Error processing article: {str(e)}")
+
+    st.markdown("---")
+    st.markdown("Made with ❤️ by AI")
 
 if __name__ == "__main__":
     main()
