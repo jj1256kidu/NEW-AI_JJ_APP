@@ -382,166 +382,34 @@ class ProfileExtractor:
         # Expanded designation patterns
         designation_patterns = [
             # C-Suite and Executive Leadership
-            r'(?:is|was|as|serves?\s+as|joined\s+as|appointed\s+as|named\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
-                'Chief\s+[A-Za-z]+\s+Officer',
-                'CEO|CTO|CFO|COO|CIO|CMO|CHRO|CSO|CPO',
-                'President|Vice\s+President',
-                'Executive\s+Vice\s+President',
-                'Senior\s+Vice\s+President',
-                'Global\s+Vice\s+President',
-                'Regional\s+Vice\s+President',
-                'SVP|EVP|VP|AVP',
-                'Managing\s+Director',
-                'Executive\s+Director',
-                'General\s+Manager',
-                'Country\s+Manager',
-                'Regional\s+Manager'
-            ]) + ')',
+            r'(?:is|was|as|serves?\s+as|joined\s+as|appointed\s+as|named\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief\s+[A-Za-z]+\s+Officer|CEO|CTO|CFO|COO|CIO|CMO|CHRO|CSO|CPO|President|Vice\s+President|Executive\s+Vice\s+President|Senior\s+Vice\s+President|Global\s+Vice\s+President|Regional\s+Vice\s+President|SVP|EVP|VP|AVP|Managing\s+Director|Executive\s+Director|General\s+Manager|Country\s+Manager|Regional\s+Manager))',
             
             # Senior Management and Leadership
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
-                'Senior\s+Director',
-                'Group\s+Director',
-                'Department\s+Director',
-                'Program\s+Director',
-                'Project\s+Director',
-                'Division\s+Head',
-                'Department\s+Head',
-                'Business\s+Head',
-                'Unit\s+Head',
-                'Practice\s+Head',
-                'Center\s+Head',
-                'Function\s+Head',
-                'Senior\s+Manager',
-                'Principal\s+Manager'
-            ]) + ')',
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Senior\s+Director|Group\s+Director|Department\s+Director|Program\s+Director|Project\s+Director|Division\s+Head|Department\s+Head|Business\s+Head|Unit\s+Head|Practice\s+Head|Center\s+Head|Function\s+Head|Senior\s+Manager|Principal\s+Manager))',
             
             # Technical Leadership
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
-                'Distinguished\s+Engineer',
-                'Principal\s+Engineer',
-                'Senior\s+Principal',
-                'Chief\s+Architect',
-                'Principal\s+Architect',
-                'Lead\s+Architect',
-                'Technical\s+Fellow',
-                'Senior\s+Fellow',
-                'Distinguished\s+Researcher',
-                'Principal\s+Scientist',
-                'Senior\s+Scientist',
-                'Technical\s+Director',
-                'Engineering\s+Director',
-                'Research\s+Director'
-            ]) + ')',
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Distinguished\s+Engineer|Principal\s+Engineer|Senior\s+Principal|Chief\s+Architect|Principal\s+Architect|Lead\s+Architect|Technical\s+Fellow|Senior\s+Fellow|Distinguished\s+Researcher|Principal\s+Scientist|Senior\s+Scientist|Technical\s+Director|Engineering\s+Director|Research\s+Director))',
             
             # Technology and Engineering
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
-                'Software\s+Engineer',
-                'Systems\s+Engineer',
-                'Data\s+Engineer',
-                'Cloud\s+Engineer',
-                'DevOps\s+Engineer',
-                'ML\s+Engineer',
-                'AI\s+Engineer',
-                'Security\s+Engineer',
-                'Full\s+Stack\s+Developer',
-                'Backend\s+Developer',
-                'Frontend\s+Developer',
-                'Software\s+Developer',
-                'Application\s+Developer',
-                'Mobile\s+Developer'
-            ]) + ')',
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Software\s+Engineer|Systems\s+Engineer|Data\s+Engineer|Cloud\s+Engineer|DevOps\s+Engineer|ML\s+Engineer|AI\s+Engineer|Security\s+Engineer|Full\s+Stack\s+Developer|Backend\s+Developer|Frontend\s+Developer|Software\s+Developer|Application\s+Developer|Mobile\s+Developer))',
             
             # Data and Analytics
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
-                'Data\s+Scientist',
-                'Analytics\s+Manager',
-                'Data\s+Analyst',
-                'Business\s+Analyst',
-                'Research\s+Analyst',
-                'Quantitative\s+Analyst',
-                'Machine\s+Learning\s+Engineer',
-                'AI\s+Researcher',
-                'Data\s+Architect',
-                'Analytics\s+Lead',
-                'Data\s+Lead',
-                'Insights\s+Manager'
-            ]) + ')',
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Data\s+Scientist|Analytics\s+Manager|Data\s+Analyst|Business\s+Analyst|Research\s+Analyst|Quantitative\s+Analyst|Machine\s+Learning\s+Engineer|AI\s+Researcher|Data\s+Architect|Analytics\s+Lead|Data\s+Lead|Insights\s+Manager))',
             
             # Product and Project Management
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
-                'Product\s+Manager',
-                'Program\s+Manager',
-                'Project\s+Manager',
-                'Product\s+Owner',
-                'Scrum\s+Master',
-                'Agile\s+Coach',
-                'Delivery\s+Manager',
-                'Release\s+Manager',
-                'Portfolio\s+Manager',
-                'Innovation\s+Manager'
-            ]) + ')',
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Product\s+Manager|Program\s+Manager|Project\s+Manager|Product\s+Owner|Scrum\s+Master|Agile\s+Coach|Delivery\s+Manager|Release\s+Manager|Portfolio\s+Manager|Innovation\s+Manager))',
             
             # Business Functions
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
-                'Business\s+Development\s+Manager',
-                'Sales\s+Manager',
-                'Marketing\s+Manager',
-                'Operations\s+Manager',
-                'Finance\s+Manager',
-                'HR\s+Manager',
-                'Strategy\s+Manager',
-                'Consulting\s+Manager',
-                'Account\s+Manager',
-                'Customer\s+Success\s+Manager'
-            ]) + ')'
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Business\s+Development\s+Manager|Sales\s+Manager|Marketing\s+Manager|Operations\s+Manager|Finance\s+Manager|HR\s+Manager|Strategy\s+Manager|Consulting\s+Manager|Account\s+Manager|Customer\s+Success\s+Manager))'
         ]
         
         # Enhanced company patterns
         company_patterns = [
             # Standard company formats
-            r'(?:at|with|for|from|of)\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:' + '|'.join([
-                'Inc\.',
-                'Ltd\.',
-                'LLC',
-                'Corp\.',
-                'Corporation',
-                'Company',
-                'Group',
-                'Holdings',
-                'Technologies',
-                'Solutions',
-                'Services',
-                'International',
-                'Global',
-                'Digital',
-                'Software',
-                'Systems',
-                'Consulting',
-                'Capital',
-                'Partners',
-                'Ventures'
-            ]) + '))',
+            r'(?:at|with|for|from|of)\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:Inc\.|Ltd\.|LLC|Corp\.|Corporation|Company|Group|Holdings|Technologies|Solutions|Services|International|Global|Digital|Software|Systems|Consulting|Capital|Partners|Ventures))',
             
             # Industry-specific companies
-            r'([A-Z][A-Za-z0-9\s&\.\-]+(?:' + '|'.join([
-                'Bank(?:ing)?',
-                'Financial',
-                'Insurance',
-                'Healthcare',
-                'Pharma(?:ceuticals)?',
-                'Medical',
-                'Tech(?:nologies)?',
-                'Digital',
-                'Cyber',
-                'Analytics',
-                'Consulting',
-                'Manufacturing',
-                'Industries',
-                'Energy',
-                'Media',
-                'Retail'
-            ]) + '))',
+            r'([A-Z][A-Za-z0-9\s&\.\-]+(?:Bank(?:ing)?|Financial|Insurance|Healthcare|Pharma(?:ceuticals)?|Medical|Tech(?:nologies)?|Digital|Cyber|Analytics|Consulting|Manufacturing|Industries|Energy|Media|Retail))',
             
             # Company with location
             r'([A-Z][A-Za-z0-9\s&\.\-]+(?:\s+(?:India|US|UK|Global|Asia|Europe|Pacific)))',
@@ -773,7 +641,7 @@ def main():
     st.markdown('<p class="tagline">Smarter Prospecting Starts with News ⚡</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-tagline">Where News Sparks the Next Deal 🎯</p>', unsafe_allow_html=True)
 
-    tab1, tab2 = st.tabs(["📰 URL Analysis", "�� Text Analysis"])
+    tab1, tab2 = st.tabs(["📰 URL Analysis", "Text Analysis"])
 
     extractor = ProfileExtractor()
     
