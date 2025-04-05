@@ -9,6 +9,7 @@ import urllib3
 import subprocess
 import os
 from datetime import datetime
+import random
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -284,72 +285,90 @@ class ProfileExtractor:
             
         return name
 
+    def clean_text(self, text):
+        """Clean and standardize extracted text."""
+        if not text:
+            return ""
+        # Remove unwanted characters and normalize spacing
+        text = text.strip()
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'[^\w\s&\-\.]', '', text)
+        return text.strip()
+
     def get_clean_text_from_url(self, url):
-        """Extract and clean text from URL."""
+        """Extract and clean text from URL with improved error handling and multiple user agents."""
+        if not url:
+            return ""
+        
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/91.0.864.59 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15'
+        ]
+        
+        headers = {'User-Agent': random.choice(user_agents)}
+        
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Connection': 'keep-alive',
-            }
+            # Add timeout and verify=False for better connection handling
+            response = requests.get(url, headers=headers, timeout=15, verify=False)
+            response.raise_for_status()
             
-            response = requests.get(url, headers=headers, verify=False, timeout=30)
-            if response.status_code != 200:
-                st.error(f"Failed to fetch URL. Status code: {response.status_code}")
-                return None
-                
+            # Parse with BeautifulSoup
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove unwanted elements
-            for tag in ['script', 'style', 'nav', 'header', 'footer', 'aside']:
-                for element in soup.find_all(tag):
-                    element.decompose()
+            for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe']):
+                element.decompose()
             
-            # Try to find the main content
-            content = None
+            # Try multiple content extraction strategies
+            content = ""
             
-            # Try different content locations
-            content_candidates = [
-                soup.find('article'),
-                soup.find(class_=lambda x: x and 'article' in x.lower()),
-                soup.find(id=lambda x: x and 'article' in x.lower()),
-                soup.find('main'),
-                soup.find(class_=lambda x: x and 'content' in x.lower()),
+            # Strategy 1: Look for article content
+            article = soup.find('article') or soup.find(class_=re.compile(r'article|story|content|main'))
+            if article:
+                content = article.get_text()
+            
+            # Strategy 2: Look for specific content divs
+            if not content:
+                content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text'))
+                content = ' '.join(div.get_text() for div in content_divs)
+            
+            # Strategy 3: Look for paragraphs
+            if not content:
+                paragraphs = soup.find_all('p')
+                content = ' '.join(p.get_text() for p in paragraphs)
+            
+            # Clean the extracted content
+            content = re.sub(r'\s+', ' ', content)  # Normalize whitespace
+            content = re.sub(r'[^\w\s.,!?-]', '', content)  # Remove special characters
+            content = re.sub(r'\s+([.,!?])', r'\1', content)  # Fix spacing around punctuation
+            
+            # Remove common unwanted phrases
+            unwanted_phrases = [
+                'cookie consent',
+                'privacy policy',
+                'terms of service',
+                'advertisement',
+                'subscribe now',
+                'share this article'
             ]
+            for phrase in unwanted_phrases:
+                content = re.sub(rf'\b{phrase}\b', '', content, flags=re.IGNORECASE)
             
-            for candidate in content_candidates:
-                if candidate:
-                    content = candidate
-                    break
+            return content.strip()
             
-            if not content:
-                # Fallback to all paragraphs
-                content = soup.find_all('p')
-                
-            if not content:
-                st.error("Could not find article content")
-                return None
-                
-            # Extract text
-            if isinstance(content, list):
-                text = ' '.join(p.get_text() for p in content)
-            else:
-                text = content.get_text()
-                
-            # Clean text
-            text = re.sub(r'\s+', ' ', text)  # Remove extra whitespace
-            text = re.sub(r'\n+', ' ', text)  # Remove newlines
-            text = text.strip()
-            
-            return text
-            
+        except requests.RequestException as e:
+            print(f"Error fetching URL: {str(e)}")
+            return ""
         except Exception as e:
-            st.error(f"Error processing URL: {str(e)}")
-            return None
+            print(f"Error processing content: {str(e)}")
+            return ""
 
     def extract_profiles(self, text):
         """Extract and clean professional profiles using advanced AI-driven pattern recognition."""
+        if not text:
+            return []
+        
         doc = self.nlp(text)
         profiles = []
         seen_names = set()
@@ -506,14 +525,11 @@ class ProfileExtractor:
                 if not name or name in seen_names:
                     continue
                 
-                # Get enhanced context
                 context, context_features = analyze_context(ent, doc)
                 
-                # Extract with context awareness
                 designations = []
                 companies = []
                 
-                # Pattern matching with context
                 for pattern in designation_patterns:
                     matches = re.finditer(pattern, context, re.IGNORECASE)
                     for match in matches:
@@ -538,12 +554,11 @@ class ProfileExtractor:
                     primary_company = companies[0] if companies else ""
                     
                     if validate_extraction(name, primary_designation, primary_company, context_features):
-                        # Create enhanced LinkedIn search URL
                         search_terms = [name]
                         if primary_designation:
-                            search_terms.extend(primary_designation.split()[:2])  # Use first two words of designation
+                            search_terms.extend(primary_designation.split()[:2])
                         if primary_company:
-                            search_terms.append(primary_company.split()[0])  # Add first word of company
+                            search_terms.append(primary_company.split()[0])
                         
                         linkedin_url = (
                             "https://www.linkedin.com/search/results/people/?"
