@@ -401,6 +401,57 @@ class ProfileExtractor:
                 
         return designation.title()
 
+    def clean_company(self, company):
+        """Clean and validate company name."""
+        if not company:
+            return None
+        
+        # Remove leading/trailing whitespace
+        company = company.strip()
+        
+        # Remove common prefixes
+        prefixes = ['the ', 'at ', 'from ', 'with ', 'of ']
+        for prefix in prefixes:
+            if company.lower().startswith(prefix):
+                company = company[len(prefix):]
+        
+        # Clean quoted text
+        company = re.sub(r'"([^"]*)"', r'\1', company)
+        company = re.sub(r"'([^']*)'", r'\1', company)
+        
+        # Basic validation
+        if len(company) < 2:
+            return None
+        
+        # Ensure starts with capital letter
+        if not company[0].isupper():
+            return None
+        
+        # Remove any extra whitespace
+        company = ' '.join(company.split())
+        
+        # Remove unwanted characters but keep dots and ampersands
+        company = re.sub(r'[^\w\s.&-]', '', company)
+        
+        # Standardize common suffixes
+        suffix_mapping = {
+            'Inc': 'Inc.',
+            'Corp': 'Corporation',
+            'Ltd': 'Ltd.',
+            'LLC': 'LLC',
+            'Co': 'Co.',
+            'Company': 'Company',
+            'Technologies': 'Technologies',
+            'Solutions': 'Solutions',
+            'Limited': 'Limited'
+        }
+        
+        for suffix, replacement in suffix_mapping.items():
+            if company.endswith(suffix):
+                company = company[:-len(suffix)] + replacement
+        
+        return company.strip()
+
     def get_clean_text_from_url(self, url):
         """Extract and clean text from URL."""
         user_agents = [
