@@ -369,11 +369,15 @@ class ProfileExtractor:
     def extract_profiles(self, text):
         """Extract and clean professional profiles with comprehensive pattern matching."""
         if not text:
+            st.warning("No text provided for analysis.")
             return []
         
         doc = self.nlp(text)
         profiles = []
         seen_names = set()
+        
+        # Debug information
+        st.info(f"Processing text with {len(list(doc.sents))} sentences...")
         
         # Expanded designation patterns
         designation_patterns = [
@@ -567,49 +571,41 @@ class ProfileExtractor:
             score = 0
             confidence = "low"
             
-            # Name validation (0-3 points)
+            # Name validation (0-2 points)
             if name and len(name.split()) >= 2:
                 score += 1
-                if len(name.split()) >= 3:  # Full name with middle name
-                    score += 1
                 if re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$', name):  # Proper capitalization
                     score += 1
             
-            # Designation validation (0-3 points)
+            # Designation validation (0-2 points)
             if designation:
                 score += 1
-                if any(senior_term in designation.lower() for senior_term in ['senior', 'lead', 'head', 'chief', 'director', 'vp', 'president']):
-                    score += 1
                 if len(designation.split()) >= 2:  # Detailed designation
                     score += 1
             
-            # Company validation (0-3 points)
+            # Company validation (0-2 points)
             if company:
                 score += 1
                 if len(company.split()) >= 2:  # Multi-word company name
                     score += 1
-                if any(suffix in company for suffix in ['Inc', 'Corp', 'Ltd', 'LLC', 'Limited']):
-                    score += 1
             
-            # Context validation (0-3 points)
+            # Context validation (0-2 points)
             context_lower = context['text'].lower()
             if any(term in context_lower for term in ['joined', 'appointed', 'promoted', 'leads', 'heading']):
                 score += 1
             if any(term in context_lower for term in ['years', 'experience', 'professional', 'career']):
                 score += 1
-            if re.search(r'(?:based|located|headquarters|office)\s+(?:in|at)', context_lower):
-                score += 1
             
             # Determine confidence level
-            if score >= 9:
+            if score >= 5:
                 confidence = "very_high"
-            elif score >= 7:
+            elif score >= 4:
                 confidence = "high"
-            elif score >= 5:
+            elif score >= 3:
                 confidence = "medium"
             
             return {
-                'is_valid': score >= 5,
+                'is_valid': score >= 3,  # Lowered threshold from 5 to 3
                 'score': score,
                 'confidence': confidence
             }
@@ -645,6 +641,14 @@ class ProfileExtractor:
                             if company and len(company.split()) <= 6:
                                 companies.append(company)
                     
+                    # Debug information for each potential profile
+                    if name and (designations or companies):
+                        st.write(f"Found potential profile: {name}")
+                        if designations:
+                            st.write(f"Designations: {', '.join(designations)}")
+                        if companies:
+                            st.write(f"Companies: {', '.join(companies)}")
+                    
                     # Validate and create profile
                     if designations or companies:
                         validation_result = validate_profile(
@@ -677,6 +681,14 @@ class ProfileExtractor:
                             
                             profiles.append(profile)
                             seen_names.add(name)
+        
+        if not profiles:
+            st.warning("No valid profiles found. Try with different content or ensure the text contains professional profiles.")
+            st.info("Tips for better results:")
+            st.info("1. Make sure the text contains full names (first and last name)")
+            st.info("2. Include professional titles or designations")
+            st.info("3. Mention company names or organizations")
+            st.info("4. Provide context about the person's role or position")
         
         return profiles
 
