@@ -260,29 +260,31 @@ class ProfileExtractor:
         }
 
     def clean_name(self, name):
-        """Clean and validate person name."""
-        if not name or len(name) < 3 or len(name) > 50:
-            return None
-            
-        name = name.strip()
-        words = name.split()
+        """Enhanced name cleaning with better validation."""
+        if not name:
+            return ""
         
-        # Check basic name validity
-        if len(words) < 2 or len(words) > 5:
-            return None
-            
-        # Check for invalid terms
-        if any(word.lower() in self.invalid_terms for word in words):
-            return None
-            
-        # Ensure proper capitalization
-        if not all(word[0].isupper() for word in words if word):
-            return None
-            
-        # Remove any numbers or special characters
-        if re.search(r'[0-9@#$%^&*()_+=\[\]{};:"|<>?]', name):
-            return None
-            
+        # Basic cleaning
+        name = name.strip()
+        name = re.sub(r'\s+', ' ', name)
+        
+        # Remove titles and common prefixes/suffixes
+        titles = r'(?:Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.|Sir|Madam|Miss|Shri|Smt|Jr\.|Sr\.|I|II|III|IV|V|MD|PhD|MBA|CPA|Esq\.)'
+        name = re.sub(f'^{titles}\s*', '', name, flags=re.IGNORECASE)
+        name = re.sub(f'\s*{titles}$', '', name, flags=re.IGNORECASE)
+        
+        # Remove numbers and special characters
+        name = re.sub(r'[0-9]', '', name)
+        name = re.sub(r'[^\w\s\-\']', '', name)
+        
+        # Validate name
+        name = name.strip()
+        if not name or len(name.split()) < 2 or len(name) < 4:
+            return ""
+        
+        # Capitalize each word
+        name = ' '.join(word.capitalize() for word in name.split())
+        
         return name
 
     def clean_text(self, text):
@@ -365,7 +367,7 @@ class ProfileExtractor:
             return ""
 
     def extract_profiles(self, text):
-        """Extract and clean professional profiles using advanced AI-driven pattern recognition."""
+        """Extract and clean professional profiles with comprehensive pattern matching."""
         if not text:
             return []
         
@@ -373,208 +375,304 @@ class ProfileExtractor:
         profiles = []
         seen_names = set()
         
-        # Expanded designation patterns with industry-specific roles
+        # Expanded designation patterns
         designation_patterns = [
-            # Executive Leadership
-            r'(?:is|was|as|appointed|named|serves? as|joined as)?\s*(?:the\s+)?([^,\.]+(?:' + '|'.join([
+            # C-Suite and Executive Leadership
+            r'(?:is|was|as|serves?\s+as|joined\s+as|appointed\s+as|named\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
                 'Chief\s+[A-Za-z]+\s+Officer',
-                'CEO|CTO|CFO|COO|CIO|CMO|CPO|CHRO|CSO',
-                'Founder|Co-Founder|Managing\s+Partner',
-                'Executive\s+Chairman|Chairman|Chairperson',
-                'Board\s+(?:Member|Director|Advisor)',
-                'Managing\s+Director|Executive\s+Director'
-            ]) + ')[^,\.]*)',
-            
-            # Senior Management
-            r'(?:the\s+)?([^,\.]+(?:' + '|'.join([
-                'Senior\s+Vice\s+President|Executive\s+Vice\s+President',
-                'Senior\s+VP|SVP|EVP|AVP',
-                'Global\s+Head|Regional\s+Head|Country\s+Head',
-                'Division\s+Head|Business\s+Head|Unit\s+Head',
-                'Senior\s+Director|Group\s+Director',
-                'Principal|Partner|Associate\s+Partner'
-            ]) + ')[^,\.]*)',
-            
-            # Technical Leadership
-            r'(?:the\s+)?([^,\.]+(?:' + '|'.join([
-                'Distinguished\s+Engineer|Principal\s+Engineer',
-                'Chief\s+Architect|Lead\s+Architect',
-                'Technical\s+Fellow|Engineering\s+Fellow',
-                'Distinguished\s+Researcher|Principal\s+Scientist',
-                'R&D\s+(?:Head|Director|Manager)',
-                'Innovation\s+(?:Lead|Head|Director)'
-            ]) + ')[^,\.]*)',
-            
-            # Domain Specific
-            r'(?:the\s+)?([^,\.]+(?:' + '|'.join([
-                'Data\s+(?:Scientist|Architect|Engineer)',
-                'AI|ML|Cloud|DevOps|SRE|Platform',
-                'Product\s+(?:Manager|Owner|Lead)',
-                'Program\s+(?:Manager|Director)',
-                'Solution\s+(?:Architect|Engineer)',
-                'Security\s+(?:Engineer|Architect|Lead)'
-            ]) + ')[^,\.]*)',
-            
-            # Business Functions
-            r'(?:the\s+)?([^,\.]+(?:' + '|'.join([
-                'Strategy|Operations|Marketing|Sales',
-                'Business\s+Development|Customer\s+Success',
-                'Human\s+Resources|Talent\s+Acquisition',
-                'Finance|Legal|Compliance|Risk',
-                'Research|Analytics|Intelligence',
-                'Consulting|Advisory'
-            ]) + ')[^,\.]*)'
-        ]
-        
-        # Enhanced company patterns with industry context
-        company_patterns = [
-            # Standard Company Identifiers
-            r'(?:at|of|with|from|for)\s+([A-Z][A-Za-z0-9\s&\.]+(?:' + '|'.join([
-                'Inc(?:orporated)?',
-                'Ltd|Limited',
-                'Corp(?:oration)?',
-                'LLC|LLP|PLLC',
-                'Group|Holdings|Ventures',
-                'Technologies|Solutions|Systems',
-                'International|Global|Worldwide',
-                'Partners|Associates|Consultants'
+                'CEO|CTO|CFO|COO|CIO|CMO|CHRO|CSO|CPO',
+                'President|Vice\s+President',
+                'Executive\s+Vice\s+President',
+                'Senior\s+Vice\s+President',
+                'Global\s+Vice\s+President',
+                'Regional\s+Vice\s+President',
+                'SVP|EVP|VP|AVP',
+                'Managing\s+Director',
+                'Executive\s+Director',
+                'General\s+Manager',
+                'Country\s+Manager',
+                'Regional\s+Manager'
             ]) + ')',
             
-            # Industry-Specific Companies
-            r'([A-Z][A-Za-z0-9\s&\.]+(?:' + '|'.join([
-                'Bank|Financial|Insurance|Capital',
-                'Healthcare|Medical|Pharma|Biotech',
-                'Software|Digital|Cyber|Tech',
-                'Consulting|Services|Solutions',
-                'Manufacturing|Industries|Products',
-                'Energy|Utilities|Resources',
-                'Media|Entertainment|Communications',
-                'Retail|Consumer|Brands'
+            # Senior Management and Leadership
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
+                'Senior\s+Director',
+                'Group\s+Director',
+                'Department\s+Director',
+                'Program\s+Director',
+                'Project\s+Director',
+                'Division\s+Head',
+                'Department\s+Head',
+                'Business\s+Head',
+                'Unit\s+Head',
+                'Practice\s+Head',
+                'Center\s+Head',
+                'Function\s+Head',
+                'Senior\s+Manager',
+                'Principal\s+Manager'
+            ]) + ')',
+            
+            # Technical Leadership
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
+                'Distinguished\s+Engineer',
+                'Principal\s+Engineer',
+                'Senior\s+Principal',
+                'Chief\s+Architect',
+                'Principal\s+Architect',
+                'Lead\s+Architect',
+                'Technical\s+Fellow',
+                'Senior\s+Fellow',
+                'Distinguished\s+Researcher',
+                'Principal\s+Scientist',
+                'Senior\s+Scientist',
+                'Technical\s+Director',
+                'Engineering\s+Director',
+                'Research\s+Director'
+            ]) + ')',
+            
+            # Technology and Engineering
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
+                'Software\s+Engineer',
+                'Systems\s+Engineer',
+                'Data\s+Engineer',
+                'Cloud\s+Engineer',
+                'DevOps\s+Engineer',
+                'ML\s+Engineer',
+                'AI\s+Engineer',
+                'Security\s+Engineer',
+                'Full\s+Stack\s+Developer',
+                'Backend\s+Developer',
+                'Frontend\s+Developer',
+                'Software\s+Developer',
+                'Application\s+Developer',
+                'Mobile\s+Developer'
+            ]) + ')',
+            
+            # Data and Analytics
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
+                'Data\s+Scientist',
+                'Analytics\s+Manager',
+                'Data\s+Analyst',
+                'Business\s+Analyst',
+                'Research\s+Analyst',
+                'Quantitative\s+Analyst',
+                'Machine\s+Learning\s+Engineer',
+                'AI\s+Researcher',
+                'Data\s+Architect',
+                'Analytics\s+Lead',
+                'Data\s+Lead',
+                'Insights\s+Manager'
+            ]) + ')',
+            
+            # Product and Project Management
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
+                'Product\s+Manager',
+                'Program\s+Manager',
+                'Project\s+Manager',
+                'Product\s+Owner',
+                'Scrum\s+Master',
+                'Agile\s+Coach',
+                'Delivery\s+Manager',
+                'Release\s+Manager',
+                'Portfolio\s+Manager',
+                'Innovation\s+Manager'
+            ]) + ')',
+            
+            # Business Functions
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:' + '|'.join([
+                'Business\s+Development\s+Manager',
+                'Sales\s+Manager',
+                'Marketing\s+Manager',
+                'Operations\s+Manager',
+                'Finance\s+Manager',
+                'HR\s+Manager',
+                'Strategy\s+Manager',
+                'Consulting\s+Manager',
+                'Account\s+Manager',
+                'Customer\s+Success\s+Manager'
+            ]) + ')'
+        ]
+        
+        # Enhanced company patterns
+        company_patterns = [
+            # Standard company formats
+            r'(?:at|with|for|from|of)\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:' + '|'.join([
+                'Inc(?:orporated)?',
+                'Corp(?:oration)?',
+                'Ltd(?:\.)?|Limited',
+                'LLC|LLP|PLLC',
+                'Group|Holdings',
+                'Technologies',
+                'Solutions',
+                'Systems',
+                'Services',
+                'Software',
+                'Consulting',
+                'International',
+                'Global',
+                'Ventures',
+                'Partners',
+                'Associates'
             ]) + '))',
             
-            # Organizational Context
-            r'(?:joined|works?\s+(?:at|with|for)|employed\s+by|based\s+(?:at|in))\s+([A-Z][A-Za-z0-9\s&\.]+)',
-            r'(?:the|a|an)\s+([A-Z][A-Za-z0-9\s&\.]+(?:\s+(?:company|organization|enterprise|firm|startup)))',
-            r'(?:subsidiary|division|unit|branch)\s+of\s+([A-Z][A-Za-z0-9\s&\.]+)'
+            # Industry-specific companies
+            r'([A-Z][A-Za-z0-9\s&\.\-]+(?:' + '|'.join([
+                'Bank(?:ing)?',
+                'Financial',
+                'Insurance',
+                'Healthcare',
+                'Pharma(?:ceuticals)?',
+                'Medical',
+                'Tech(?:nologies)?',
+                'Digital',
+                'Cyber',
+                'Analytics',
+                'Consulting',
+                'Manufacturing',
+                'Industries',
+                'Energy',
+                'Media',
+                'Retail'
+            ]) + '))',
+            
+            # Company with location
+            r'([A-Z][A-Za-z0-9\s&\.\-]+(?:\s+(?:India|US|UK|Global|Asia|Europe|Pacific)))',
+            
+            # Generic company patterns
+            r'(?:joined|works?\s+(?:at|with|for)|employed\s+by|based\s+(?:at|in))\s+([A-Z][A-Za-z0-9\s&\.\-]+)',
+            r'(?:the|a|an)\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:\s+(?:company|organization|enterprise|firm|startup)))',
+            r'(?:subsidiary|division|unit|branch)\s+of\s+([A-Z][A-Za-z0-9\s&\.\-]+)'
         ]
 
-        def analyze_context(ent, doc):
-            """Enhanced context analysis around entities."""
-            # Find the containing sentence and its neighbors
-            current_sent = None
-            prev_sent = None
-            next_sent = None
+        def get_extended_context(doc, sent_index, window_size=3):
+            """Get extended context around a sentence with configurable window size."""
+            sentences = list(doc.sents)
+            start_idx = max(0, sent_index - window_size)
+            end_idx = min(len(sentences), sent_index + window_size + 1)
             
-            for sent in doc.sents:
-                if ent.start >= sent.start and ent.end <= sent.end:
-                    current_sent = sent
-                    break
-            
-            if current_sent:
-                # Get surrounding sentences
-                sents = list(doc.sents)
-                sent_index = sents.index(current_sent)
-                if sent_index > 0:
-                    prev_sent = sents[sent_index - 1]
-                if sent_index < len(sents) - 1:
-                    next_sent = sents[sent_index + 1]
-            
-            # Combine context with weights
-            context = ""
-            if prev_sent:
-                context += prev_sent.text + " "
-            if current_sent:
-                context += current_sent.text + " "
-            if next_sent:
-                context += next_sent.text
-            
-            # Extract additional context features
-            features = {
-                'has_role_indicators': bool(re.search(r'\b(?:appointed|named|joined|leads?|heading|manages?)\b', context, re.I)),
-                'has_company_indicators': bool(re.search(r'\b(?:at|with|for|company|organization|firm)\b', context, re.I)),
-                'has_duration': bool(re.search(r'\b(?:years?|months?|since|from)\b', context, re.I)),
-                'has_location': bool(re.search(r'\b(?:based|located|headquarters|office)\b', context, re.I))
+            context = {
+                'text': ' '.join(sent.text for sent in sentences[start_idx:end_idx]),
+                'prev_context': ' '.join(sent.text for sent in sentences[start_idx:sent_index]) if start_idx < sent_index else "",
+                'current': sentences[sent_index].text,
+                'next_context': ' '.join(sent.text for sent in sentences[sent_index+1:end_idx]) if sent_index+1 < end_idx else ""
             }
-            
-            return context, features
+            return context
 
-        def validate_extraction(name, designation, company, context_features):
-            """Validate extracted information using context features."""
+        def validate_profile(name, designation, company, context):
+            """Enhanced profile validation with scoring system."""
             score = 0
-            if context_features['has_role_indicators']:
-                score += 2
-            if context_features['has_company_indicators']:
-                score += 2
-            if context_features['has_duration']:
+            confidence = "low"
+            
+            # Name validation (0-3 points)
+            if name and len(name.split()) >= 2:
                 score += 1
-            if context_features['has_location']:
+                if len(name.split()) >= 3:  # Full name with middle name
+                    score += 1
+                if re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$', name):  # Proper capitalization
+                    score += 1
+            
+            # Designation validation (0-3 points)
+            if designation:
+                score += 1
+                if any(senior_term in designation.lower() for senior_term in ['senior', 'lead', 'head', 'chief', 'director', 'vp', 'president']):
+                    score += 1
+                if len(designation.split()) >= 2:  # Detailed designation
+                    score += 1
+            
+            # Company validation (0-3 points)
+            if company:
+                score += 1
+                if len(company.split()) >= 2:  # Multi-word company name
+                    score += 1
+                if any(suffix in company for suffix in ['Inc', 'Corp', 'Ltd', 'LLC', 'Limited']):
+                    score += 1
+            
+            # Context validation (0-3 points)
+            context_lower = context['text'].lower()
+            if any(term in context_lower for term in ['joined', 'appointed', 'promoted', 'leads', 'heading']):
+                score += 1
+            if any(term in context_lower for term in ['years', 'experience', 'professional', 'career']):
+                score += 1
+            if re.search(r'(?:based|located|headquarters|office)\s+(?:in|at)', context_lower):
                 score += 1
             
-            # Additional validation rules
-            if designation and any(word in designation.lower() for word in ['senior', 'chief', 'head', 'director', 'vp', 'president']):
-                score += 2
-            if company and len(company.split()) >= 2:
-                score += 1
+            # Determine confidence level
+            if score >= 9:
+                confidence = "very_high"
+            elif score >= 7:
+                confidence = "high"
+            elif score >= 5:
+                confidence = "medium"
             
-            return score >= 3  # Minimum threshold for validity
+            return {
+                'is_valid': score >= 5,
+                'score': score,
+                'confidence': confidence
+            }
 
-        # Process entities with enhanced context
-        for ent in doc.ents:
-            if ent.label_ == "PERSON":
-                name = self.clean_name(ent.text)
-                if not name or name in seen_names:
-                    continue
-                
-                context, context_features = analyze_context(ent, doc)
-                
-                designations = []
-                companies = []
-                
-                for pattern in designation_patterns:
-                    matches = re.finditer(pattern, context, re.IGNORECASE)
-                    for match in matches:
-                        designation = self.clean_text(match.group(1))
-                        if designation and len(designation.split()) <= 7:
-                            designations.append(designation)
-                
-                for pattern in company_patterns:
-                    matches = re.finditer(pattern, context)
-                    for match in matches:
-                        company = self.clean_text(match.group(1))
-                        if company and len(company.split()) <= 6:
-                            companies.append(company)
-                
-                # Remove duplicates while preserving order
-                designations = list(dict.fromkeys(designations))
-                companies = list(dict.fromkeys(companies))
-                
-                # Validate and filter
-                if designations or companies:
-                    primary_designation = designations[0] if designations else ""
-                    primary_company = companies[0] if companies else ""
+        # Process text with enhanced context
+        sentences = list(doc.sents)
+        for i, sent in enumerate(sentences):
+            for ent in sent.ents:
+                if ent.label_ == "PERSON":
+                    name = self.clean_name(ent.text)
+                    if not name or name in seen_names:
+                        continue
                     
-                    if validate_extraction(name, primary_designation, primary_company, context_features):
-                        search_terms = [name]
-                        if primary_designation:
-                            search_terms.extend(primary_designation.split()[:2])
-                        if primary_company:
-                            search_terms.append(primary_company.split()[0])
-                        
-                        linkedin_url = (
-                            "https://www.linkedin.com/search/results/people/?"
-                            f"keywords={'+'.join(search_terms).replace(' ', '%20')}"
+                    # Get extended context
+                    context = get_extended_context(doc, i)
+                    
+                    # Extract designations and companies with context
+                    designations = []
+                    companies = []
+                    
+                    # Process patterns with context awareness
+                    for pattern in designation_patterns:
+                        matches = re.finditer(pattern, context['text'], re.IGNORECASE)
+                        for match in matches:
+                            designation = self.clean_text(match.group(1))
+                            if designation and len(designation.split()) <= 7:
+                                designations.append(designation)
+                    
+                    for pattern in company_patterns:
+                        matches = re.finditer(pattern, context['text'])
+                        for match in matches:
+                            company = self.clean_text(match.group(1))
+                            if company and len(company.split()) <= 6:
+                                companies.append(company)
+                    
+                    # Validate and create profile
+                    if designations or companies:
+                        validation_result = validate_profile(
+                            name,
+                            designations[0] if designations else "",
+                            companies[0] if companies else "",
+                            context
                         )
                         
-                        profile = {
-                            "name": name,
-                            "designation": ' | '.join(designations) if designations else "",
-                            "company": ' | '.join(companies) if companies else "",
-                            "linkedin_search": linkedin_url,
-                            "confidence_score": context_features
-                        }
-                        
-                        profiles.append(profile)
-                        seen_names.add(name)
+                        if validation_result['is_valid']:
+                            search_terms = [name]
+                            if designations:
+                                search_terms.extend(designations[0].split()[:2])
+                            if companies:
+                                search_terms.append(companies[0].split()[0])
+                            
+                            linkedin_url = (
+                                "https://www.linkedin.com/search/results/people/?"
+                                f"keywords={'+'.join(search_terms).replace(' ', '%20')}"
+                            )
+                            
+                            profile = {
+                                "name": name,
+                                "designation": ' | '.join(designations) if designations else "",
+                                "company": ' | '.join(companies) if companies else "",
+                                "linkedin_search": linkedin_url,
+                                "confidence": validation_result['confidence'],
+                                "score": validation_result['score']
+                            }
+                            
+                            profiles.append(profile)
+                            seen_names.add(name)
         
         return profiles
 
