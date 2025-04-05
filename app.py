@@ -250,110 +250,20 @@ class ProfileExtractor:
             'justice', 'adv', 'advocate', 'ca', 'er', 'eng'
         }
         
-        # Standardized designations mapping
-        self.designation_mapping = {
-            # C-Suite
-            'chief executive officer': 'CEO',
-            'ceo': 'CEO',
-            'chief technology officer': 'CTO',
-            'cto': 'CTO',
-            'chief financial officer': 'CFO',
-            'cfo': 'CFO',
-            'chief operating officer': 'COO',
-            'coo': 'COO',
-            'chief information officer': 'CIO',
-            'cio': 'CIO',
-            'chief marketing officer': 'CMO',
-            'cmo': 'CMO',
-            'chief product officer': 'CPO',
-            'cpo': 'CPO',
-            
-            # Directors
-            'managing director': 'Managing Director',
-            'md': 'Managing Director',
-            'director': 'Director',
-            'board director': 'Board Director',
-            'executive director': 'Executive Director',
-            
-            # Presidents
-            'president': 'President',
-            'vice president': 'Vice President',
-            'vp': 'Vice President',
-            'senior vice president': 'Senior Vice President',
-            'svp': 'Senior Vice President',
-            'executive vice president': 'Executive Vice President',
-            'evp': 'Executive Vice President',
-            
-            # Founders
-            'founder': 'Founder',
-            'co-founder': 'Co-Founder',
-            'cofounder': 'Co-Founder',
-            'founding partner': 'Founding Partner',
-            
-            # Management
-            'general manager': 'General Manager',
-            'senior manager': 'Senior Manager',
-            'manager': 'Manager',
-            'head': 'Head',
-            'department head': 'Department Head',
-            'team lead': 'Team Lead',
-            'group lead': 'Group Lead',
-            
-            # Technical
-            'senior engineer': 'Senior Engineer',
-            'principal engineer': 'Principal Engineer',
-            'lead engineer': 'Lead Engineer',
-            'software engineer': 'Software Engineer',
-            'systems architect': 'Systems Architect',
-            'solution architect': 'Solution Architect',
-            'technical architect': 'Technical Architect',
-            'data scientist': 'Data Scientist',
-            'senior developer': 'Senior Developer',
-            
-            # Business
-            'business head': 'Business Head',
-            'partner': 'Partner',
-            'senior partner': 'Senior Partner',
-            'associate partner': 'Associate Partner',
-            'principal consultant': 'Principal Consultant',
-            'senior consultant': 'Senior Consultant',
-            'consultant': 'Consultant'
-        }
-        
         # Invalid terms for filtering
         self.invalid_terms = {
-            # Places
             'india', 'china', 'usa', 'uk', 'europe', 'asia', 'africa',
             'america', 'australia', 'canada', 'japan', 'russia',
-            'mumbai', 'delhi', 'bangalore', 'hyderabad', 'chennai',
-            'kolkata', 'pune', 'ahmedabad', 'london', 'new york',
-            
-            # Time-related
-            'today', 'yesterday', 'tomorrow', 'week', 'month', 'year',
-            'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
-            'january', 'february', 'march', 'april', 'may', 'june',
-            
-            # Common article terms
-            'news', 'latest', 'breaking', 'update', 'report', 'exclusive',
-            'market', 'stock', 'shares', 'price', 'rates', 'article',
-            'read more', 'click here', 'full story', 'advertisement',
-            
-            # Events/Festivals
-            'diwali', 'christmas', 'new year', 'festival', 'event',
-            'conference', 'summit', 'meeting', 'webinar', 'seminar'
+            'today', 'yesterday', 'tomorrow', 'news', 'latest', 'breaking',
+            'digi', 'yatra', 'article', 'update'
         }
 
     def clean_name(self, name):
         """Clean and validate person name."""
-        if not name or len(name) < 3 or len(name) > 50:  # Increased max length
+        if not name or len(name) < 3 or len(name) > 50:
             return None
             
         name = name.strip()
-        
-        # Remove any extra whitespace
-        name = ' '.join(name.split())
-        
-        # Split into words
         words = name.split()
         
         # Check basic name validity
@@ -364,286 +274,294 @@ class ProfileExtractor:
         if any(word.lower() in self.invalid_terms for word in words):
             return None
             
-        # Ensure proper capitalization and full words
-        cleaned_words = []
-        for word in words:
-            if len(word) < 2:  # Skip single letters
-                continue
-            if not word[0].isupper():
-                return None
-            cleaned_words.append(word)
-        
-        if len(cleaned_words) < 2:
+        # Ensure proper capitalization
+        if not all(word[0].isupper() for word in words if word):
             return None
-        
+            
         # Remove any numbers or special characters
-        name = ' '.join(cleaned_words)
         if re.search(r'[0-9@#$%^&*()_+=\[\]{};:"|<>?]', name):
             return None
             
         return name
 
-    def standardize_designation(self, designation):
-        """Standardize designation to common format."""
-        if not designation:
-            return None
-            
-        designation = designation.lower().strip()
-        
-        # Check mapping for exact matches
-        if designation in self.designation_mapping:
-            return self.designation_mapping[designation]
-            
-        # Check for partial matches
-        for key, value in self.designation_mapping.items():
-            if key in designation:
-                return value
-                
-        return designation.title()
-
-    def clean_company(self, company):
-        """Clean and validate company name."""
-        if not company:
-            return None
-        
-        # Remove leading/trailing whitespace
-        company = company.strip()
-        
-        # Remove common prefixes
-        prefixes = ['the ', 'at ', 'from ', 'with ', 'of ']
-        for prefix in prefixes:
-            if company.lower().startswith(prefix):
-                company = company[len(prefix):]
-        
-        # Clean quoted text
-        company = re.sub(r'"([^"]*)"', r'\1', company)
-        company = re.sub(r"'([^']*)'", r'\1', company)
-        
-        # Basic validation
-        if len(company) < 2:
-            return None
-        
-        # Ensure starts with capital letter
-        if not company[0].isupper():
-            return None
-        
-        # Remove any extra whitespace
-        company = ' '.join(company.split())
-        
-        # Remove unwanted characters but keep dots and ampersands
-        company = re.sub(r'[^\w\s.&-]', '', company)
-        
-        # Standardize common suffixes
-        suffix_mapping = {
-            'Inc': 'Inc.',
-            'Corp': 'Corporation',
-            'Ltd': 'Ltd.',
-            'LLC': 'LLC',
-            'Co': 'Co.',
-            'Company': 'Company',
-            'Technologies': 'Technologies',
-            'Solutions': 'Solutions',
-            'Limited': 'Limited'
-        }
-        
-        for suffix, replacement in suffix_mapping.items():
-            if company.endswith(suffix):
-                company = company[:-len(suffix)] + replacement
-        
-        return company.strip()
-
     def get_clean_text_from_url(self, url):
         """Extract and clean text from URL."""
-        user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/91.0.864.48 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Safari/605.1.15'
-        ]
-
-        headers = {
-            'User-Agent': user_agents[0],
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
-        }
-
         try:
-            # Try different user agents
-            for user_agent in user_agents:
-                headers['User-Agent'] = user_agent
-                try:
-                    response = requests.get(url, headers=headers, verify=False, timeout=30)
-                    response.raise_for_status()
-                    
-                    # Try to detect the encoding
-                    if 'charset' in response.headers.get('content-type', '').lower():
-                        response.encoding = response.apparent_encoding
-                    
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    
-                    # Remove unwanted elements
-                    for element in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form']):
-                        element.decompose()
-
-                    # First try to find article content
-                    article_content = soup.find(['article', '[class*="article"]', '[id*="article"]'])
-                    if article_content:
-                        text = article_content.get_text()
-                    else:
-                        # Try to find main content
-                        main_content = soup.find(['main', '[role="main"]'])
-                        if main_content:
-                            text = main_content.get_text()
-                        else:
-                            # Fallback to all paragraphs
-                            paragraphs = soup.find_all('p')
-                            text = ' '.join(p.get_text() for p in paragraphs)
-
-                    if text:
-                        # Clean text
-                        text = re.sub(r'\s+', ' ', text)  # Replace multiple spaces
-                        text = re.sub(r'\n+', ' ', text)  # Replace newlines
-                        text = text.strip()
-                        
-                        # Additional cleaning for Times of India specific content
-                        text = re.sub(r'Printed from', '', text)
-                        text = re.sub(r'TNN \|.*?\|', '', text)
-                        
-                        return text
-
-                except Exception as e:
-                    continue
-
-            raise Exception("Could not extract content from URL")
-
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Connection': 'keep-alive',
+            }
+            
+            response = requests.get(url, headers=headers, verify=False, timeout=30)
+            if response.status_code != 200:
+                st.error(f"Failed to fetch URL. Status code: {response.status_code}")
+                return None
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Remove unwanted elements
+            for tag in ['script', 'style', 'nav', 'header', 'footer', 'aside']:
+                for element in soup.find_all(tag):
+                    element.decompose()
+            
+            # Try to find the main content
+            content = None
+            
+            # Try different content locations
+            content_candidates = [
+                soup.find('article'),
+                soup.find(class_=lambda x: x and 'article' in x.lower()),
+                soup.find(id=lambda x: x and 'article' in x.lower()),
+                soup.find('main'),
+                soup.find(class_=lambda x: x and 'content' in x.lower()),
+            ]
+            
+            for candidate in content_candidates:
+                if candidate:
+                    content = candidate
+                    break
+            
+            if not content:
+                # Fallback to all paragraphs
+                content = soup.find_all('p')
+                
+            if not content:
+                st.error("Could not find article content")
+                return None
+                
+            # Extract text
+            if isinstance(content, list):
+                text = ' '.join(p.get_text() for p in content)
+            else:
+                text = content.get_text()
+                
+            # Clean text
+            text = re.sub(r'\s+', ' ', text)  # Remove extra whitespace
+            text = re.sub(r'\n+', ' ', text)  # Remove newlines
+            text = text.strip()
+            
+            return text
+            
         except Exception as e:
-            st.error(f"Error fetching URL: {str(e)}")
+            st.error(f"Error processing URL: {str(e)}")
             return None
 
     def extract_profiles(self, text):
-        """Extract and clean professional profiles from text."""
+        """Extract and clean professional profiles using advanced AI-driven pattern recognition."""
         doc = self.nlp(text)
         profiles = []
         seen_names = set()
         
-        # Define company name cleanup
-        def clean_company_name(company):
-            if not company:
-                return ""
-            # Remove common prefixes
-            prefixes = ['at', 'for', 'with', 'from', 'of']
-            company = company.strip()
-            for prefix in prefixes:
-                if company.lower().startswith(f"{prefix} "):
-                    company = company[len(prefix)+1:].strip()
-            return company
+        # Expanded designation patterns with industry-specific roles
+        designation_patterns = [
+            # Executive Leadership
+            r'(?:is|was|as|appointed|named|serves? as|joined as)?\s*(?:the\s+)?([^,\.]+(?:' + '|'.join([
+                'Chief\s+[A-Za-z]+\s+Officer',
+                'CEO|CTO|CFO|COO|CIO|CMO|CPO|CHRO|CSO',
+                'Founder|Co-Founder|Managing\s+Partner',
+                'Executive\s+Chairman|Chairman|Chairperson',
+                'Board\s+(?:Member|Director|Advisor)',
+                'Managing\s+Director|Executive\s+Director'
+            ]) + ')[^,\.]*)',
+            
+            # Senior Management
+            r'(?:the\s+)?([^,\.]+(?:' + '|'.join([
+                'Senior\s+Vice\s+President|Executive\s+Vice\s+President',
+                'Senior\s+VP|SVP|EVP|AVP',
+                'Global\s+Head|Regional\s+Head|Country\s+Head',
+                'Division\s+Head|Business\s+Head|Unit\s+Head',
+                'Senior\s+Director|Group\s+Director',
+                'Principal|Partner|Associate\s+Partner'
+            ]) + ')[^,\.]*)',
+            
+            # Technical Leadership
+            r'(?:the\s+)?([^,\.]+(?:' + '|'.join([
+                'Distinguished\s+Engineer|Principal\s+Engineer',
+                'Chief\s+Architect|Lead\s+Architect',
+                'Technical\s+Fellow|Engineering\s+Fellow',
+                'Distinguished\s+Researcher|Principal\s+Scientist',
+                'R&D\s+(?:Head|Director|Manager)',
+                'Innovation\s+(?:Lead|Head|Director)'
+            ]) + ')[^,\.]*)',
+            
+            # Domain Specific
+            r'(?:the\s+)?([^,\.]+(?:' + '|'.join([
+                'Data\s+(?:Scientist|Architect|Engineer)',
+                'AI|ML|Cloud|DevOps|SRE|Platform',
+                'Product\s+(?:Manager|Owner|Lead)',
+                'Program\s+(?:Manager|Director)',
+                'Solution\s+(?:Architect|Engineer)',
+                'Security\s+(?:Engineer|Architect|Lead)'
+            ]) + ')[^,\.]*)',
+            
+            # Business Functions
+            r'(?:the\s+)?([^,\.]+(?:' + '|'.join([
+                'Strategy|Operations|Marketing|Sales',
+                'Business\s+Development|Customer\s+Success',
+                'Human\s+Resources|Talent\s+Acquisition',
+                'Finance|Legal|Compliance|Risk',
+                'Research|Analytics|Intelligence',
+                'Consulting|Advisory'
+            ]) + ')[^,\.]*)'
+        ]
+        
+        # Enhanced company patterns with industry context
+        company_patterns = [
+            # Standard Company Identifiers
+            r'(?:at|of|with|from|for)\s+([A-Z][A-Za-z0-9\s&\.]+(?:' + '|'.join([
+                'Inc(?:orporated)?',
+                'Ltd|Limited',
+                'Corp(?:oration)?',
+                'LLC|LLP|PLLC',
+                'Group|Holdings|Ventures',
+                'Technologies|Solutions|Systems',
+                'International|Global|Worldwide',
+                'Partners|Associates|Consultants'
+            ]) + ')',
+            
+            # Industry-Specific Companies
+            r'([A-Z][A-Za-z0-9\s&\.]+(?:' + '|'.join([
+                'Bank|Financial|Insurance|Capital',
+                'Healthcare|Medical|Pharma|Biotech',
+                'Software|Digital|Cyber|Tech',
+                'Consulting|Services|Solutions',
+                'Manufacturing|Industries|Products',
+                'Energy|Utilities|Resources',
+                'Media|Entertainment|Communications',
+                'Retail|Consumer|Brands'
+            ]) + '))',
+            
+            # Organizational Context
+            r'(?:joined|works?\s+(?:at|with|for)|employed\s+by|based\s+(?:at|in))\s+([A-Z][A-Za-z0-9\s&\.]+)',
+            r'(?:the|a|an)\s+([A-Z][A-Za-z0-9\s&\.]+(?:\s+(?:company|organization|enterprise|firm|startup)))',
+            r'(?:subsidiary|division|unit|branch)\s+of\s+([A-Z][A-Za-z0-9\s&\.]+)'
+        ]
 
+        def analyze_context(ent, doc):
+            """Enhanced context analysis around entities."""
+            # Find the containing sentence and its neighbors
+            current_sent = None
+            prev_sent = None
+            next_sent = None
+            
+            for sent in doc.sents:
+                if ent.start >= sent.start and ent.end <= sent.end:
+                    current_sent = sent
+                    break
+            
+            if current_sent:
+                # Get surrounding sentences
+                sents = list(doc.sents)
+                sent_index = sents.index(current_sent)
+                if sent_index > 0:
+                    prev_sent = sents[sent_index - 1]
+                if sent_index < len(sents) - 1:
+                    next_sent = sents[sent_index + 1]
+            
+            # Combine context with weights
+            context = ""
+            if prev_sent:
+                context += prev_sent.text + " "
+            if current_sent:
+                context += current_sent.text + " "
+            if next_sent:
+                context += next_sent.text
+            
+            # Extract additional context features
+            features = {
+                'has_role_indicators': bool(re.search(r'\b(?:appointed|named|joined|leads?|heading|manages?)\b', context, re.I)),
+                'has_company_indicators': bool(re.search(r'\b(?:at|with|for|company|organization|firm)\b', context, re.I)),
+                'has_duration': bool(re.search(r'\b(?:years?|months?|since|from)\b', context, re.I)),
+                'has_location': bool(re.search(r'\b(?:based|located|headquarters|office)\b', context, re.I))
+            }
+            
+            return context, features
+
+        def validate_extraction(name, designation, company, context_features):
+            """Validate extracted information using context features."""
+            score = 0
+            if context_features['has_role_indicators']:
+                score += 2
+            if context_features['has_company_indicators']:
+                score += 2
+            if context_features['has_duration']:
+                score += 1
+            if context_features['has_location']:
+                score += 1
+            
+            # Additional validation rules
+            if designation and any(word in designation.lower() for word in ['senior', 'chief', 'head', 'director', 'vp', 'president']):
+                score += 2
+            if company and len(company.split()) >= 2:
+                score += 1
+            
+            return score >= 3  # Minimum threshold for validity
+
+        # Process entities with enhanced context
         for ent in doc.ents:
             if ent.label_ == "PERSON":
                 name = self.clean_name(ent.text)
-                if not name or name in seen_names or name.lower() in ['digi yatra']:
+                if not name or name in seen_names:
                     continue
                 
-                # Get larger context around the name
-                start = max(0, ent.start_char - 200)
-                end = min(len(text), ent.end_char + 200)
-                context = text[start:end]
+                # Get enhanced context
+                context, context_features = analyze_context(ent, doc)
                 
-                # Extract designation
-                designation = ""
-                designation_match = re.search(
-                    rf'{name},?\s+([\w\s]+(?:VP|Vice President|President|Head|Director|Chief|CEO|CTO|CFO)[^,\.]*)',
-                    context
-                )
-                if designation_match:
-                    designation = designation_match.group(1).strip()
+                # Extract with context awareness
+                designations = []
+                companies = []
                 
-                # Extract company
-                company = ""
-                company_patterns = [
-                    rf'(?:at|for|with)\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions))',
-                    rf'{designation}.*?(?:at|for|of)\s+([A-Z][A-Za-z0-9\s&]+)'
-                ]
+                # Pattern matching with context
+                for pattern in designation_patterns:
+                    matches = re.finditer(pattern, context, re.IGNORECASE)
+                    for match in matches:
+                        designation = self.clean_text(match.group(1))
+                        if designation and len(designation.split()) <= 7:
+                            designations.append(designation)
                 
                 for pattern in company_patterns:
-                    company_match = re.search(pattern, context)
-                    if company_match:
-                        company = clean_company_name(company_match.group(1))
-                        break
+                    matches = re.finditer(pattern, context)
+                    for match in matches:
+                        company = self.clean_text(match.group(1))
+                        if company and len(company.split()) <= 6:
+                            companies.append(company)
                 
-                # For Amadeus specific case
-                if name == "Mani Ganeshan":
-                    company = "Amadeus"
-                elif name == "Latha Chembrakalam":
-                    company = "Continental"
-                elif name == "Santosh Rao":
-                    company = "IBM Consulting India and South Asia"
+                # Remove duplicates while preserving order
+                designations = list(dict.fromkeys(designations))
+                companies = list(dict.fromkeys(companies))
                 
-                # Only include profiles with valid information
-                if designation or company:
-                    linkedin_url = f"https://www.linkedin.com/search/results/people/?keywords={name.replace(' ', '%20')}"
+                # Validate and filter
+                if designations or companies:
+                    primary_designation = designations[0] if designations else ""
+                    primary_company = companies[0] if companies else ""
                     
-                    profile = {
-                        "name": name,
-                        "designation": designation,
-                        "company": company,
-                        "linkedin_search": linkedin_url
-                    }
-                    
-                    profiles.append(profile)
-                    seen_names.add(name)
+                    if validate_extraction(name, primary_designation, primary_company, context_features):
+                        # Create enhanced LinkedIn search URL
+                        search_terms = [name]
+                        if primary_designation:
+                            search_terms.extend(primary_designation.split()[:2])  # Use first two words of designation
+                        if primary_company:
+                            search_terms.append(primary_company.split()[0])  # Add first word of company
+                        
+                        linkedin_url = (
+                            "https://www.linkedin.com/search/results/people/?"
+                            f"keywords={'+'.join(search_terms).replace(' ', '%20')}"
+                        )
+                        
+                        profile = {
+                            "name": name,
+                            "designation": ' | '.join(designations) if designations else "",
+                            "company": ' | '.join(companies) if companies else "",
+                            "linkedin_search": linkedin_url,
+                            "confidence_score": context_features
+                        }
+                        
+                        profiles.append(profile)
+                        seen_names.add(name)
         
         return profiles
-
-def main():
-    st.markdown('<h1 class="main-title">🧠 NewsNex 📰</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="tagline">Smarter Prospecting Starts with News ⚡</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-tagline">Where News Sparks the Next Deal 🎯</p>', unsafe_allow_html=True)
-
-    tab1, tab2 = st.tabs(["📰 URL Analysis", "📝 Text Analysis"])
-
-    extractor = ProfileExtractor()
-    
-    with tab1:
-        url = st.text_input("Enter news article URL:", placeholder="https://example.com/article")
-        if st.button("Extract from URL", key="url_button"):
-            if url:
-                try:
-                    with st.spinner("🔍 Analyzing article..."):
-                        text = extractor.get_clean_text_from_url(url)
-                        st.success(f"✅ Successfully retrieved article content ({len(text)} characters)")
-                        
-                        profiles = extractor.extract_profiles(text)
-                        if profiles:
-                            display_results(profiles)
-                        else:
-                            st.warning("No profiles found in the article. Try:")
-                            st.info("1. Checking if the URL is accessible")
-                            st.info("2. Pasting the article text directly in the Text Analysis tab")
-                            st.info("3. Verifying that the article contains professional profiles")
-                except Exception as e:
-                    st.error(f"⚠️ Error: {str(e)}")
-                    st.info("💡 Tip: Try pasting the article text directly in the Text Analysis tab")
-            else:
-                st.warning("⚠️ Please enter a URL")
-
-    with tab2:
-        text_input = st.text_area("Paste article text:", height=200,
-                                 placeholder="Paste the article content here...")
-        if st.button("Extract from Text", key="text_button"):
-            if text_input:
-                with st.spinner("🔍 Processing text..."):
-                    profiles = extractor.extract_profiles(text_input)
-                    if profiles:
-                        display_results(profiles)
-                    else:
-                        st.warning("No profiles found in the text. Please ensure:")
-                        st.info("1. The text contains professional profiles")
-                        st.info("2. Names are mentioned with designations or companies")
-            else:
-                st.warning("⚠️ Please enter some text")
 
 def display_results(profiles):
     if not profiles:
@@ -701,6 +619,67 @@ def display_results(profiles):
         use_container_width=True,
         height=400
     )
+    
+    # Download options
+    col1, col2 = st.columns(2)
+    with col1:
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download CSV",
+            data=csv,
+            file_name=f"profiles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+    with col2:
+        json_str = json.dumps(profiles, indent=2)
+        st.download_button(
+            label="📥 Download JSON",
+            data=json_str,
+            file_name=f"profiles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json"
+        )
+
+def main():
+    st.markdown('<h1 class="main-title">🧠 NewsNex 📰</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="tagline">Smarter Prospecting Starts with News ⚡</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-tagline">Where News Sparks the Next Deal 🎯</p>', unsafe_allow_html=True)
+
+    tab1, tab2 = st.tabs(["📰 URL Analysis", "📝 Text Analysis"])
+
+    extractor = ProfileExtractor()
+    
+    with tab1:
+        url = st.text_input("Enter news article URL:", placeholder="https://example.com/article")
+        if st.button("Extract from URL", key="url_button"):
+            if url:
+                try:
+                    with st.spinner("🔍 Analyzing article..."):
+                        text = extractor.get_clean_text_from_url(url)
+                        if text:
+                            st.success(f"✅ Successfully retrieved article content ({len(text)} characters)")
+                            profiles = extractor.extract_profiles(text)
+                            display_results(profiles)
+                        else:
+                            st.warning("No profiles found in the article. Try:")
+                            st.info("1. Checking if the URL is accessible")
+                            st.info("2. Pasting the article text directly in the Text Analysis tab")
+                            st.info("3. Verifying that the article contains professional profiles")
+                except Exception as e:
+                    st.error(f"⚠️ Error: {str(e)}")
+                    st.info("💡 Tip: Try pasting the article text directly in the Text Analysis tab")
+            else:
+                st.warning("⚠️ Please enter a URL")
+
+    with tab2:
+        text_input = st.text_area("Paste article text:", height=200,
+                                 placeholder="Paste the article content here...")
+        if st.button("Extract from Text", key="text_button"):
+            if text_input:
+                with st.spinner("🔍 Processing text..."):
+                    profiles = extractor.extract_profiles(text_input)
+                    display_results(profiles)
+            else:
+                st.warning("⚠️ Please enter some text")
 
     st.markdown(
         """
