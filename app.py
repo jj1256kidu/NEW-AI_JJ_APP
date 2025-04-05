@@ -229,6 +229,7 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
 @st.cache_resource(show_spinner=False)
 def load_nlp_model():
     try:
@@ -344,10 +345,15 @@ class ProfileExtractor:
 
     def clean_name(self, name):
         """Clean and validate person name."""
-        if not name or len(name) < 3 or len(name) > 40:
+        if not name or len(name) < 3 or len(name) > 50:  # Increased max length
             return None
             
         name = name.strip()
+        
+        # Remove any extra whitespace
+        name = ' '.join(name.split())
+        
+        # Split into words
         words = name.split()
         
         # Check basic name validity
@@ -358,11 +364,20 @@ class ProfileExtractor:
         if any(word.lower() in self.invalid_terms for word in words):
             return None
             
-        # Ensure proper capitalization
-        if not all(word[0].isupper() for word in words if word):
+        # Ensure proper capitalization and full words
+        cleaned_words = []
+        for word in words:
+            if len(word) < 2:  # Skip single letters
+                continue
+            if not word[0].isupper():
+                return None
+            cleaned_words.append(word)
+        
+        if len(cleaned_words) < 2:
             return None
-            
+        
         # Remove any numbers or special characters
+        name = ' '.join(cleaned_words)
         if re.search(r'[0-9@#$%^&*()_+=\[\]{};:"|<>?]', name):
             return None
             
@@ -462,33 +477,57 @@ class ProfileExtractor:
                 if not name or name in seen_names:
                     continue
                 
-                # Get context around the name
-                start = max(0, ent.start_char - 200)
-                end = min(len(text), ent.end_char + 200)
-                context = text[start:end].lower()
+                # Get context around the name (increased context window)
+                start = max(0, ent.start_char - 150)
+                end = min(len(text), ent.end_char + 150)
+                context = text[start:end]
                 
                 # Extract designations and companies
                 designations = []
                 companies = []
                 
-                # Look for designations
-                for key in self.designation_mapping:
-                    if key in context:
-                        designations.append(self.designation_mapping[key])
-                
-                # Look for company patterns
-                company_patterns = [
-                    r'(?:at|with|for|in|of)\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP)?)',
-                    r'([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP))',
-                    r'(?:joined|works\s+at|employed\s+by)\s+([A-Z][A-Za-z0-9\s&]+)'
+                # Improved designation patterns
+                designation_patterns = [
+                    r'(?:is|was|as|appointed|named|serves? as|joined as)\s+(?:the\s+)?([^,.]+(?:' + '|'.join([
+                        'CEO', 'Chief Executive Officer',
+                        'CTO', 'Chief Technology Officer',
+                        'Director', 'Managing Director',
+                        'President', 'Vice President',
+                        'Head', 'Senior Vice President',
+                        'Operations'
+                    ]) + ')[^,.]*)',
+                    r'(?:the\s+)?([^,.]+(?:Director|Manager|Officer|President|Founder|Head|Lead|Engineer|Architect|Consultant|Partner)[^,.]*)'
                 ]
                 
-                for pattern in company_patterns:
-                    matches = re.finditer(pattern, text[start:end])
+                # Look for designations using patterns
+                for pattern in designation_patterns:
+                    matches = re.finditer(pattern, context, re.IGNORECASE)
                     for match in matches:
-                        company = match.group(1).strip() if len(match.groups()) > 0 else match.group().strip()
+                        designation = match.group(1).strip()
+                        if designation:
+                            clean_designation = self.standardize_designation(designation)
+                            if clean_designation:
+                                designations.append(clean_designation)
+                
+                # Improved company patterns
+                company_patterns = [
+                    r'(?:at|of|with|from|joins?)\s+([A-Z][A-Za-z0-9\s&\.]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP))',
+                    r'([A-Z][A-Za-z0-9\s&\.]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP))'
+                ]
+                
+                # Look for companies
+                for pattern in company_patterns:
+                    matches = re.finditer(pattern, context)
+                    for match in matches:
+                        company = match.group(1).strip()
                         if company and len(company) > 2:
-                            companies.append(company)
+                            clean_company = self.clean_company(company)
+                            if clean_company:
+                                companies.append(clean_company)
+                
+                # Remove duplicates while preserving order
+                designations = list(dict.fromkeys(designations))
+                companies = list(dict.fromkeys(companies))
                 
                 # Only include profiles with at least one designation or company
                 if designations or companies:
@@ -496,8 +535,8 @@ class ProfileExtractor:
                     
                     profile = {
                         "name": name,
-                        "designations": list(set(designations)),
-                        "companies": list(set(companies)),
+                        "designations": designations,
+                        "companies": companies,
                         "linkedin_search": linkedin_url
                     }
                     
@@ -598,8 +637,14 @@ def display_results(profiles):
         # Create a clean DataFrame
         df = pd.json_normalize(profiles)
         
-        # Rename columns for better display
+        # Format the lists in designations and companies columns
         if not df.empty:
+            if 'designations' in df.columns:
+                df['designations'] = df['designations'].apply(lambda x: ', '.join(x) if isinstance(x, list) else x)
+            if 'companies' in df.columns:
+                df['companies'] = df['companies'].apply(lambda x: ', '.join(x) if isinstance(x, list) else x)
+            
+            # Rename columns for better display
             df.columns = [col.replace('.', ' ').title() for col in df.columns]
         
         # Display the DataFrame with custom styling
