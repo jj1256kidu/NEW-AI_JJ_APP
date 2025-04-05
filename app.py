@@ -460,61 +460,67 @@ class ProfileExtractor:
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Safari/605.1.15'
         ]
 
-        for user_agent in user_agents:
-            try:
-                headers = {
-                    'User-Agent': user_agent,
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'Accept-Encoding': 'gzip, deflate',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1'
-                }
+        headers = {
+            'User-Agent': user_agents[0],
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
 
-                response = self.session.get(url, headers=headers, verify=False, timeout=30)
-                response.raise_for_status()
-                
-                if 'charset' in response.headers.get('content-type', '').lower():
-                    response.encoding = response.apparent_encoding
-                
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Remove unwanted elements
-                for element in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form']):
-                    element.decompose()
-
-                text = ""
-                
-                # Try multiple methods to extract text
-                if not text:
-                    article = soup.find(['article', 'main', '[role="article"]'])
-                    if article:
-                        text = article.get_text()
-
-                if not text:
-                    content_divs = soup.find_all(['div', 'section'], 
-                        class_=lambda x: x and any(word in str(x).lower() for word in 
-                        ['article', 'content', 'story', 'body', 'text', 'main', 'news']))
-                    if content_divs:
-                        text = ' '.join(div.get_text() for div in content_divs)
-
-                if not text:
-                    paragraphs = soup.find_all('p')
-                    text = ' '.join(p.get_text() for p in paragraphs)
-
-                if text:
-                    # Clean text
-                    text = re.sub(r'\s+', ' ', text)
-                    text = re.sub(r'\n+', ' ', text)
-                    text = re.sub(r'[^\w\s.,!?-]', '', text)
-                    text = text.strip()
+        try:
+            # Try different user agents
+            for user_agent in user_agents:
+                headers['User-Agent'] = user_agent
+                try:
+                    response = requests.get(url, headers=headers, verify=False, timeout=30)
+                    response.raise_for_status()
                     
-                    return text
+                    # Try to detect the encoding
+                    if 'charset' in response.headers.get('content-type', '').lower():
+                        response.encoding = response.apparent_encoding
+                    
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    # Remove unwanted elements
+                    for element in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form']):
+                        element.decompose()
 
-            except Exception as e:
-                continue
+                    # First try to find article content
+                    article_content = soup.find(['article', '[class*="article"]', '[id*="article"]'])
+                    if article_content:
+                        text = article_content.get_text()
+                    else:
+                        # Try to find main content
+                        main_content = soup.find(['main', '[role="main"]'])
+                        if main_content:
+                            text = main_content.get_text()
+                        else:
+                            # Fallback to all paragraphs
+                            paragraphs = soup.find_all('p')
+                            text = ' '.join(p.get_text() for p in paragraphs)
 
-        raise Exception("Could not extract content from URL. Please try pasting the article text directly.")
+                    if text:
+                        # Clean text
+                        text = re.sub(r'\s+', ' ', text)  # Replace multiple spaces
+                        text = re.sub(r'\n+', ' ', text)  # Replace newlines
+                        text = text.strip()
+                        
+                        # Additional cleaning for Times of India specific content
+                        text = re.sub(r'Printed from', '', text)
+                        text = re.sub(r'TNN \|.*?\|', '', text)
+                        
+                        return text
+
+                except Exception as e:
+                    continue
+
+            raise Exception("Could not extract content from URL")
+
+        except Exception as e:
+            st.error(f"Error fetching URL: {str(e)}")
+            return None
 
     def extract_profiles(self, text):
         """Extract and clean professional profiles from text."""
