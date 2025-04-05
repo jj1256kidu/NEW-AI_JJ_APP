@@ -528,72 +528,73 @@ class ProfileExtractor:
         profiles = []
         seen_names = set()
         
+        # Improved designation patterns
+        designation_patterns = [
+            r'(?:is|was|as|appointed|named|serves? as|joined as)?\s*(?:the\s+)?([^,\.]+(?:' + '|'.join([
+                'Senior VP|VP|Vice President|President',
+                'Chief Executive Officer|CEO',
+                'Chief Technology Officer|CTO',
+                'Director|Managing Director|Head',
+                'Senior Manager|Manager',
+                'Engineer|Engineering'
+            ]) + ')[^,\.]*)',
+            r'(?:the\s+)?([^,\.]+(?:Director|VP|Vice President|Head|Leader)[^,\.]*)'
+        ]
+        
+        # Improved company patterns
+        company_patterns = [
+            r'(?:at|of|with|from|for)\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions)?)',
+            r'([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions))'
+        ]
+        
         for ent in doc.ents:
             if ent.label_ == "PERSON":
                 name = self.clean_name(ent.text)
-                if not name or name in seen_names:
+                if not name or name in seen_names or name in ['Digi Yatra']:  # Skip invalid names
                     continue
                 
-                # Get context around the name (increased context window)
+                # Get context around the name
                 start = max(0, ent.start_char - 150)
                 end = min(len(text), ent.end_char + 150)
                 context = text[start:end]
                 
-                # Extract designations and companies
+                # Extract designations
                 designations = []
-                companies = []
-                
-                # Improved designation patterns
-                designation_patterns = [
-                    r'(?:is|was|as|appointed|named|serves? as|joined as)\s+(?:the\s+)?([^,.]+(?:' + '|'.join([
-                        'CEO', 'Chief Executive Officer',
-                        'CTO', 'Chief Technology Officer',
-                        'Director', 'Managing Director',
-                        'President', 'Vice President',
-                        'Head', 'Senior Vice President',
-                        'Operations'
-                    ]) + ')[^,.]*)',
-                    r'(?:the\s+)?([^,.]+(?:Director|Manager|Officer|President|Founder|Head|Lead|Engineer|Architect|Consultant|Partner)[^,.]*)'
-                ]
-                
-                # Look for designations using patterns
                 for pattern in designation_patterns:
                     matches = re.finditer(pattern, context, re.IGNORECASE)
                     for match in matches:
                         designation = match.group(1).strip()
-                        if designation:
-                            clean_designation = self.standardize_designation(designation)
-                            if clean_designation:
-                                designations.append(clean_designation)
+                        if designation and not any(d in designation.lower() for d in ['000', 'engineers']):
+                            designations.append(designation)
                 
-                # Improved company patterns
-                company_patterns = [
-                    r'(?:at|of|with|from|joins?)\s+([A-Z][A-Za-z0-9\s&\.]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP))',
-                    r'([A-Z][A-Za-z0-9\s&\.]+(?:Inc\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|Technologies|Solutions|Group|Holdings|Ventures|Capital|Partners|LLP))'
-                ]
-                
-                # Look for companies
+                # Extract companies
+                companies = []
                 for pattern in company_patterns:
                     matches = re.finditer(pattern, context)
                     for match in matches:
                         company = match.group(1).strip()
                         if company and len(company) > 2:
-                            clean_company = self.clean_company(company)
-                            if clean_company:
-                                companies.append(clean_company)
+                            # Clean company name
+                            company = re.sub(r'\s+', ' ', company)  # Remove extra spaces
+                            company = re.sub(r'(?i)co\.$', 'Company', company)  # Standardize suffix
+                            companies.append(company)
                 
                 # Remove duplicates while preserving order
                 designations = list(dict.fromkeys(designations))
                 companies = list(dict.fromkeys(companies))
                 
-                # Only include profiles with at least one designation or company
+                # Filter out invalid designations
+                designations = [d for d in designations if not any(invalid in d.lower() for invalid in 
+                              ['000', 'engineers', 'core', 'work', 'leads'])]
+                
+                # Only include profiles with valid information
                 if designations or companies:
                     linkedin_url = f"https://www.linkedin.com/search/results/people/?keywords={name.replace(' ', '%20')}"
                     
                     profile = {
                         "name": name,
-                        "designations": designations,
-                        "companies": companies,
+                        "designations": ', '.join(designations) if designations else '',
+                        "companies": ', '.join(companies) if companies else '',
                         "linkedin_search": linkedin_url
                     }
                     
@@ -651,6 +652,16 @@ def main():
                 st.warning("⚠️ Please enter some text")
 
 def display_results(profiles):
+    if not profiles:
+        st.warning("No profiles found. Try with different content or ensure the text contains professional profiles.")
+        return
+    
+    # Calculate metrics
+    total_prospects = len(profiles)
+    complete_profiles = sum(1 for p in profiles if p['designations'] and p['companies'])
+    unique_companies = len(set(c.strip() for p in profiles if p['companies'] for c in p['companies'].split(',')))
+    
+    # Display metrics
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -658,13 +669,12 @@ def display_results(profiles):
             f"""
             <div class="metric-card">
                 <div class="metric-title">📊 Total Prospects</div>
-                <div class="metric-value">{len(profiles)}</div>
+                <div class="metric-value">{total_prospects}</div>
             </div>
             """,
             unsafe_allow_html=True
         )
     
-    complete_profiles = sum(1 for p in profiles if p['designations'] and p['companies'])
     with col2:
         st.markdown(
             f"""
@@ -676,7 +686,6 @@ def display_results(profiles):
             unsafe_allow_html=True
         )
     
-    unique_companies = len(set(company for p in profiles for company in p['companies']))
     with col3:
         st.markdown(
             f"""
@@ -688,47 +697,16 @@ def display_results(profiles):
             unsafe_allow_html=True
         )
 
-    if profiles:
-        st.markdown("### 📋 Extracted Profiles")
-        
-        # Create a clean DataFrame
-        df = pd.json_normalize(profiles)
-        
-        # Format the lists in designations and companies columns
-        if not df.empty:
-            if 'designations' in df.columns:
-                df['designations'] = df['designations'].apply(lambda x: ', '.join(x) if isinstance(x, list) else x)
-            if 'companies' in df.columns:
-                df['companies'] = df['companies'].apply(lambda x: ', '.join(x) if isinstance(x, list) else x)
-            
-            # Rename columns for better display
-            df.columns = [col.replace('.', ' ').title() for col in df.columns]
-        
-        # Display the DataFrame with custom styling
-        st.dataframe(
-            df,
-            use_container_width=True,
-            height=400
-        )
-        
-        # Download buttons
-        col1, col2 = st.columns(2)
-        with col1:
-            csv = df.to_csv(index=False)
-            st.download_button(
-                label="📥 Download CSV",
-                data=csv,
-                file_name=f"profiles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
-        with col2:
-            json_str = json.dumps(profiles, indent=2)
-            st.download_button(
-                label="📥 Download JSON",
-                data=json_str,
-                file_name=f"profiles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json"
-            )
+    # Create DataFrame
+    df = pd.DataFrame(profiles)
+    
+    # Display results
+    st.markdown("### 📋 Extracted Profiles")
+    st.dataframe(
+        df,
+        use_container_width=True,
+        height=400
+    )
 
     st.markdown(
         """
