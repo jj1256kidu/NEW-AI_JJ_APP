@@ -75,7 +75,7 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         text-align: center;
         margin: 2rem 0 1rem;
-        font-family: 'Inter', sans-serif;
+        font-family: 'Inter', 'sans serif';
         letter-spacing: -0.02em;
     }
     
@@ -84,7 +84,7 @@ st.markdown("""
         color: #40c4ff;
         text-align: center;
         margin-bottom: 0.5rem;
-        font-family: 'Inter', sans-serif;
+        font-family: 'Inter', 'sans serif';
         font-weight: 600;
         text-shadow: 0 0 20px rgba(64, 196, 255, 0.3);
     }
@@ -94,7 +94,7 @@ st.markdown("""
         color: #00ffd1;
         text-align: center;
         margin-bottom: 2rem;
-        font-family: 'Inter', sans-serif;
+        font-family: 'Inter', 'sans serif';
         font-style: italic;
         font-weight: 500;
         text-shadow: 0 0 20px rgba(0, 255, 209, 0.3);
@@ -497,22 +497,26 @@ class ProfileExtractor:
         company_patterns = [
             # Standard company formats
             r'(?:at|with|for|from|of)\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:' + '|'.join([
-                'Inc(?:orporated)?',
-                'Corp(?:oration)?',
-                'Ltd(?:\.)?|Limited',
-                'LLC|LLP|PLLC',
-                'Group|Holdings',
+                'Inc\.',
+                'Ltd\.',
+                'LLC',
+                'Corp\.',
+                'Corporation',
+                'Company',
+                'Group',
+                'Holdings',
                 'Technologies',
                 'Solutions',
-                'Systems',
                 'Services',
-                'Software',
-                'Consulting',
                 'International',
                 'Global',
-                'Ventures',
+                'Digital',
+                'Software',
+                'Systems',
+                'Consulting',
+                'Capital',
                 'Partners',
-                'Associates'
+                'Ventures'
             ]) + '))',
             
             # Industry-specific companies
@@ -757,7 +761,7 @@ def main():
     st.markdown('<p class="tagline">Smarter Prospecting Starts with News ⚡</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-tagline">Where News Sparks the Next Deal 🎯</p>', unsafe_allow_html=True)
 
-    tab1, tab2 = st.tabs(["📰 URL Analysis", "📝 Text Analysis"])
+    tab1, tab2 = st.tabs(["📰 URL Analysis", "�� Text Analysis"])
 
     extractor = ProfileExtractor()
     
