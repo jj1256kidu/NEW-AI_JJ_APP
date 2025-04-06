@@ -38,15 +38,21 @@ def setup_nltk():
         nltk.data.find('tokenizers/punkt')
     except LookupError:
         try:
-            # Download punkt data
+            # Download all required NLTK data
             nltk.download('punkt', quiet=True)
+            nltk.download('punkt_tab', quiet=True)
+            nltk.download('averaged_perceptron_tagger', quiet=True)
         except Exception as e:
             st.error(f"Error downloading NLTK data: {str(e)}")
-            st.info("Please run: python -m nltk.downloader punkt")
+            st.info("Please run: python -m nltk.downloader punkt punkt_tab averaged_perceptron_tagger")
             raise
 
 # Initialize NLTK
-setup_nltk()
+try:
+    setup_nltk()
+except Exception as e:
+    st.error("Failed to initialize NLTK. Please ensure NLTK data is properly installed.")
+    st.stop()
 
 # Custom CSS with professional styling
 st.markdown("""
