@@ -285,16 +285,16 @@ class ProfileExtractor:
         
         # Basic cleaning
         name = name.strip()
-        name = re.sub(r'\s+', ' ', name)
+        name = re.sub(r'\\s+', ' ', name)
         
         # Remove titles and common prefixes/suffixes
         titles = r'(?:Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.|Sir|Madam|Miss|Shri|Smt|Jr\.|Sr\.|I|II|III|IV|V|MD|PhD|MBA|CPA|Esq\.)'
-        name = re.sub(f'^{titles}\s*', '', name, flags=re.IGNORECASE)
-        name = re.sub(f'\s*{titles}$', '', name, flags=re.IGNORECASE)
+        name = re.sub(f'^{titles}\\s*', '', name, flags=re.IGNORECASE)
+        name = re.sub(f'\\s*{titles}$', '', name, flags=re.IGNORECASE)
         
         # Remove numbers and special characters
         name = re.sub(r'[0-9]', '', name)
-        name = re.sub(r'[^\w\s\-\']', '', name)
+        name = re.sub(r'[^\\w\\s\\-\\\']', '', name)
         
         # Strict name validation
         name = name.strip()
@@ -335,8 +335,8 @@ class ProfileExtractor:
             return ""
         # Remove unwanted characters and normalize spacing
         text = text.strip()
-        text = re.sub(r'\s+', ' ', text)
-        text = re.sub(r'[^\w\s&\-\.]', '', text)
+        text = re.sub(r'\\s+', ' ', text)
+        text = re.sub(r'[^\\w\\s&\\-\\.]', '', text)
         return text.strip()
 
     def get_clean_text_from_url(self, url):
@@ -392,9 +392,9 @@ class ProfileExtractor:
                 return ""
             
             # Clean the extracted content
-            content = re.sub(r'\s+', ' ', content)  # Normalize whitespace
-            content = re.sub(r'[^\w\s.,!?-]', '', content)  # Remove special characters
-            content = re.sub(r'\s+([.,!?])', r'\1', content)  # Fix spacing around punctuation
+            content = re.sub(r'\\s+', ' ', content)  # Normalize whitespace
+            content = re.sub(r'[^\\w\\s.,!?-]', '', content)  # Remove special characters
+            content = re.sub(r'\\s+([.,!?])', r'\\1', content)  # Fix spacing around punctuation
             
             # Remove common unwanted phrases
             unwanted_phrases = [
@@ -420,7 +420,7 @@ class ProfileExtractor:
                 'browser'
             ]
             for phrase in unwanted_phrases:
-                content = re.sub(rf'\b{phrase}\b', '', content, flags=re.IGNORECASE)
+                content = re.sub(rf'\\b{phrase}\\b', '', content, flags=re.IGNORECASE)
             
             return content.strip()
             
