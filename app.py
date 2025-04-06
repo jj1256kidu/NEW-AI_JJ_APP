@@ -342,7 +342,6 @@ class ProfileExtractor:
     def get_clean_text_from_url(self, url):
         """Extract and clean text from URL with improved error handling and multiple user agents."""
         if not url:
-            st.warning("No URL provided")
             return ""
         
         user_agents = [
@@ -351,48 +350,45 @@ class ProfileExtractor:
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15'
         ]
         
-        headers = {'User-Agent': random.choice(user_agents)}
+        headers = {
+            'User-Agent': random.choice(user_agents),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0'
+        }
         
         try:
-            st.info(f"Fetching content from URL: {url}")
-            # Add timeout and verify=False for better connection handling
             response = requests.get(url, headers=headers, timeout=15, verify=False)
             response.raise_for_status()
-            
-            st.info(f"Response status: {response.status_code}")
             
             # Parse with BeautifulSoup
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove unwanted elements
-            for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe']):
+            for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe', 'noscript']):
                 element.decompose()
             
             # Try multiple content extraction strategies
             content = ""
             
             # Strategy 1: Look for article content
-            article = soup.find('article') or soup.find(class_=re.compile(r'article|story|content|main'))
+            article = soup.find('article') or soup.find(class_=re.compile(r'article|story|content|main|post|entry'))
             if article:
                 content = article.get_text()
-                st.info("Found content using article tag strategy")
             
             # Strategy 2: Look for specific content divs
             if not content:
-                content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text'))
+                content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text|body|main'))
                 content = ' '.join(div.get_text() for div in content_divs)
-                if content:
-                    st.info("Found content using content divs strategy")
             
             # Strategy 3: Look for paragraphs
             if not content:
                 paragraphs = soup.find_all('p')
                 content = ' '.join(p.get_text() for p in paragraphs)
-                if content:
-                    st.info("Found content using paragraphs strategy")
             
             if not content:
-                st.warning("No content found using any extraction strategy")
                 return ""
             
             # Clean the extracted content
@@ -407,133 +403,41 @@ class ProfileExtractor:
                 'terms of service',
                 'advertisement',
                 'subscribe now',
-                'share this article'
+                'share this article',
+                'read more',
+                'click here',
+                'follow us',
+                'related articles',
+                'also read',
+                'more from',
+                'newsletter',
+                'sign up',
+                'log in',
+                'register',
+                'download',
+                'install',
+                'app',
+                'browser'
             ]
             for phrase in unwanted_phrases:
                 content = re.sub(rf'\b{phrase}\b', '', content, flags=re.IGNORECASE)
             
-            st.info(f"Extracted content length: {len(content)} characters")
             return content.strip()
             
-        except requests.RequestException as e:
-            st.error(f"Error fetching URL: {str(e)}")
+        except requests.RequestException:
             return ""
-        except Exception as e:
-            st.error(f"Error processing content: {str(e)}")
+        except Exception:
             return ""
 
     def extract_profiles(self, text):
         """Extract and clean professional profiles with strict validation."""
         if not text:
-            st.warning("No text provided for analysis.")
             return []
         
         doc = self.nlp(text)
         profiles = []
         seen_names = set()
         
-        # Debug information
-        st.info(f"Processing text with {len(list(doc.sents))} sentences...")
-        
-        # Expanded designation patterns
-        designation_patterns = [
-            # C-Suite and Executive Leadership
-            r'(?:is|was|as|serves?\s+as|joined\s+as|appointed\s+as|named\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief\s+[A-Za-z]+\s+Officer|CEO|CTO|CFO|COO|CIO|CMO|CHRO|CSO|CPO|President|Vice\s+President|Executive\s+Vice\s+President|Senior\s+Vice\s+President|Global\s+Vice\s+President|Regional\s+Vice\s+President|SVP|EVP|VP|AVP|Managing\s+Director|Executive\s+Director|General\s+Manager|Country\s+Manager|Regional\s+Manager))',
-            
-            # Senior Management and Leadership
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Senior\s+Director|Group\s+Director|Department\s+Director|Program\s+Director|Project\s+Director|Division\s+Head|Department\s+Head|Business\s+Head|Unit\s+Head|Practice\s+Head|Center\s+Head|Function\s+Head|Senior\s+Manager|Principal\s+Manager))',
-            
-            # Technical Leadership
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Distinguished\s+Engineer|Principal\s+Engineer|Senior\s+Principal|Chief\s+Architect|Principal\s+Architect|Lead\s+Architect|Technical\s+Fellow|Senior\s+Fellow|Distinguished\s+Researcher|Principal\s+Scientist|Senior\s+Scientist|Technical\s+Director|Engineering\s+Director|Research\s+Director))',
-            
-            # Technology and Engineering
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Software\s+Engineer|Systems\s+Engineer|Data\s+Engineer|Cloud\s+Engineer|DevOps\s+Engineer|ML\s+Engineer|AI\s+Engineer|Security\s+Engineer|Full\s+Stack\s+Developer|Backend\s+Developer|Frontend\s+Developer|Software\s+Developer|Application\s+Developer|Mobile\s+Developer))',
-            
-            # Data and Analytics
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Data\s+Scientist|Analytics\s+Manager|Data\s+Analyst|Business\s+Analyst|Research\s+Analyst|Quantitative\s+Analyst|Machine\s+Learning\s+Engineer|AI\s+Researcher|Data\s+Architect|Analytics\s+Lead|Data\s+Lead|Insights\s+Manager))',
-            
-            # Product and Project Management
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Product\s+Manager|Program\s+Manager|Project\s+Manager|Product\s+Owner|Scrum\s+Master|Agile\s+Coach|Delivery\s+Manager|Release\s+Manager|Portfolio\s+Manager|Innovation\s+Manager))',
-            
-            # Business Functions
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Business\s+Development\s+Manager|Sales\s+Manager|Marketing\s+Manager|Operations\s+Manager|Finance\s+Manager|HR\s+Manager|Strategy\s+Manager|Consulting\s+Manager|Account\s+Manager|Customer\s+Success\s+Manager))'
-        ]
-        
-        # Enhanced company patterns
-        company_patterns = [
-            # Standard company formats
-            r'(?:at|with|for|from|of)\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:Inc\.|Ltd\.|LLC|Corp\.|Corporation|Company|Group|Holdings|Technologies|Solutions|Services|International|Global|Digital|Software|Systems|Consulting|Capital|Partners|Ventures))',
-            
-            # Industry-specific companies
-            r'([A-Z][A-Za-z0-9\s&\.\-]+(?:Bank(?:ing)?|Financial|Insurance|Healthcare|Pharma(?:ceuticals)?|Medical|Tech(?:nologies)?|Digital|Cyber|Analytics|Consulting|Manufacturing|Industries|Energy|Media|Retail))',
-            
-            # Company with location
-            r'([A-Z][A-Za-z0-9\s&\.\-]+(?:\s+(?:India|US|UK|Global|Asia|Europe|Pacific)))',
-            
-            # Generic company patterns
-            r'(?:joined|works?\s+(?:at|with|for)|employed\s+by|based\s+(?:at|in))\s+([A-Z][A-Za-z0-9\s&\.\-]+)',
-            r'(?:the|a|an)\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:\s+(?:company|organization|enterprise|firm|startup)))',
-            r'(?:subsidiary|division|unit|branch)\s+of\s+([A-Z][A-Za-z0-9\s&\.\-]+)'
-        ]
-
-        def get_extended_context(doc, sent_index, window_size=3):
-            """Get extended context around a sentence with configurable window size."""
-            sentences = list(doc.sents)
-            start_idx = max(0, sent_index - window_size)
-            end_idx = min(len(sentences), sent_index + window_size + 1)
-            
-            context = {
-                'text': ' '.join(sent.text for sent in sentences[start_idx:end_idx]),
-                'prev_context': ' '.join(sent.text for sent in sentences[start_idx:sent_index]) if start_idx < sent_index else "",
-                'current': sentences[sent_index].text,
-                'next_context': ' '.join(sent.text for sent in sentences[sent_index+1:end_idx]) if sent_index+1 < end_idx else ""
-            }
-            return context
-
-        def validate_profile(name, designation, company, context):
-            """Enhanced profile validation with scoring system."""
-            score = 0
-            confidence = "low"
-            
-            # Name validation (0-2 points)
-            if name and len(name.split()) >= 2:
-                score += 1
-                if re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$', name):  # Proper capitalization
-                    score += 1
-            
-            # Designation validation (0-2 points)
-            if designation:
-                score += 1
-                if len(designation.split()) >= 2:  # Detailed designation
-                    score += 1
-            
-            # Company validation (0-2 points)
-            if company:
-                score += 1
-                if len(company.split()) >= 2:  # Multi-word company name
-                    score += 1
-            
-            # Context validation (0-2 points)
-            context_lower = context['text'].lower()
-            if any(term in context_lower for term in ['joined', 'appointed', 'promoted', 'leads', 'heading']):
-                score += 1
-            if any(term in context_lower for term in ['years', 'experience', 'professional', 'career']):
-                score += 1
-            
-            # Determine confidence level
-            if score >= 5:
-                confidence = "very_high"
-            elif score >= 4:
-                confidence = "high"
-            elif score >= 3:
-                confidence = "medium"
-            
-            return {
-                'is_valid': score >= 3,  # Lowered threshold from 5 to 3
-                'score': score,
-                'confidence': confidence
-            }
-
         # Process text with enhanced context
         sentences = list(doc.sents)
         for i, sent in enumerate(sentences):
@@ -606,14 +510,6 @@ class ProfileExtractor:
                             
                             profiles.append(profile)
                             seen_names.add(name)
-        
-        if not profiles:
-            st.warning("No valid profiles found. Try with different content or ensure the text contains professional profiles.")
-            st.info("Tips for better results:")
-            st.info("1. Make sure the text contains full names (first and last name)")
-            st.info("2. Include professional titles or designations")
-            st.info("3. Mention company names or organizations")
-            st.info("4. Provide context about the person's role or position")
         
         return profiles
 
@@ -714,12 +610,6 @@ def main():
                     with st.spinner("🔍 Analyzing article..."):
                         text = extractor.get_clean_text_from_url(url)
                         if text:
-                            st.success(f"✅ Successfully retrieved article content ({len(text)} characters)")
-                            
-                            # Display a sample of the extracted content
-                            st.info("Sample of extracted content:")
-                            st.text(text[:500] + "..." if len(text) > 500 else text)
-                            
                             profiles = extractor.extract_profiles(text)
                             
                             # Apply deduplication if enabled
@@ -733,15 +623,9 @@ def main():
                             
                             display_results(profiles)
                         else:
-                            st.warning("No content could be extracted from the URL. Try:")
-                            st.info("1. Checking if the URL is accessible")
-                            st.info("2. Pasting the article text directly in the Text Analysis tab")
-                            st.info("3. Verifying that the article contains professional profiles")
-                except Exception as e:
-                    st.error(f"⚠️ Error: {str(e)}")
-                    st.info("💡 Tip: Try pasting the article text directly in the Text Analysis tab")
-            else:
-                st.warning("⚠️ Please enter a URL")
+                            st.warning("Could not extract content from the URL. Try pasting the article text directly.")
+                except Exception:
+                    st.warning("Could not process the URL. Try pasting the article text directly.")
 
     with tab2:
         text_input = st.text_area("Paste article text:", height=200,
@@ -762,7 +646,7 @@ def main():
                     
                     display_results(profiles)
             else:
-                st.warning("⚠️ Please enter some text")
+                st.warning("Please enter some text")
 
     # Add clear cache button
     if deduplicate and st.button("Clear deduplication cache"):
