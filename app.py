@@ -291,39 +291,57 @@ class ProfileExtractor:
         ]
 
     def get_clean_text_from_url(self, url):
-        """Get and clean text content from a URL."""
+        """Get and clean text content from a URL with improved error handling."""
         if not url:
             return "No URL provided"
 
         try:
-            # First try with requests
-            response = requests.get(url, headers=self.headers, timeout=30)
-            response.raise_for_status()
-            content = self._extract_content_from_html(response.text)
+            # Validate URL format
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
             
-            # If content is too short, try with selenium if available
-            if len(content.split()) < 50:
+            # First try with requests
+            try:
+                response = requests.get(url, headers=self.headers, timeout=30)
+                response.raise_for_status()
+                
+                # Check content type
+                content_type = response.headers.get('content-type', '')
+                if 'text/html' not in content_type:
+                    return f"URL does not contain HTML content. Content type: {content_type}"
+                
+                content = self._extract_content_from_html(response.text)
+                
+                # If content is too short, try with selenium if available
+                if len(content.split()) < 50:
+                    try:
+                        selenium_content = self._get_text_with_selenium(url)
+                        if selenium_content and len(selenium_content.split()) > len(content.split()):
+                            content = selenium_content
+                    except Exception as e:
+                        print(f"Selenium extraction failed: {str(e)}")
+                
+                if not content or len(content.split()) < 20:
+                    return "Could not extract meaningful content from the URL. Please check if the URL is correct and accessible."
+                
+                return content
+
+            except requests.RequestException as e:
+                error_msg = f"Error fetching URL: {str(e)}"
+                print(error_msg)
+                
+                # Try selenium as fallback
                 try:
                     content = self._get_text_with_selenium(url)
-                except Exception as e:
-                    print(f"Selenium extraction failed: {str(e)}")
-            
-            if not content or len(content.split()) < 20:
-                return "Could not extract meaningful content from the URL. Please check if the URL is correct and accessible."
-            
-            return content
+                    if content and len(content.split()) >= 20:
+                        return content
+                except Exception as se:
+                    print(f"Selenium fallback failed: {str(se)}")
+                
+                return error_msg
 
-        except requests.RequestException as e:
-            error_msg = f"Error fetching URL: {str(e)}"
-            print(error_msg)
-            try:
-                # Fallback to selenium on request failure
-                content = self._get_text_with_selenium(url)
-                if content:
-                    return content
-            except Exception as se:
-                print(f"Selenium fallback failed: {str(se)}")
-            return error_msg
+        except Exception as e:
+            return f"Unexpected error processing URL: {str(e)}"
 
     def _get_text_with_requests(self, url):
         """Extract text using requests."""
@@ -346,34 +364,53 @@ class ProfileExtractor:
             return ""
 
     def _get_text_with_selenium(self, url):
-        """Extract text using Selenium for JavaScript-rendered content."""
-        driver = None
+        """Extract text using Selenium with improved error handling."""
         try:
+            from selenium import webdriver
+            from selenium.webdriver.chrome.options import Options
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            
             # Setup Chrome options
             chrome_options = Options()
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument('--headless')
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--window-size=1920,1080')
+            chrome_options.add_argument('--disable-notifications')
+            chrome_options.add_argument('--disable-extensions')
+            chrome_options.add_argument('--disable-popup-blocking')
+            chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+            chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
             
-            # Create driver
+            # Initialize driver
             driver = webdriver.Chrome(options=chrome_options)
             
-            # Load page
-            driver.get(url)
-            
-            # Wait for content to load
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            
-            # Get page source
-            return self._extract_content_from_html(driver.page_source)
-        except:
-            return ""
-        finally:
-            if driver:
+            try:
+                # Load page
+                driver.get(url)
+                
+                # Wait for content to load
+                wait = WebDriverWait(driver, 10)
+                wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                
+                # Get page source
+                html = driver.page_source
+                
+                # Extract content
+                content = self._extract_content_from_html(html)
+                
+                return content
+                
+            finally:
                 driver.quit()
+                
+        except ImportError:
+            return "Selenium is not available. Please install it for enhanced URL processing."
+        except Exception as e:
+            return f"Error with Selenium extraction: {str(e)}"
 
     def _extract_content_from_html(self, html):
         """Extract and clean content from HTML."""
