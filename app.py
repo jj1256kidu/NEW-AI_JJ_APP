@@ -23,10 +23,22 @@ import nltk
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Download required NLTK data
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt', quiet=True)
+@st.cache_resource
+def setup_nltk():
+    try:
+        # Try to find punkt data
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        try:
+            # Download punkt data
+            nltk.download('punkt', quiet=True)
+        except Exception as e:
+            st.error(f"Error downloading NLTK data: {str(e)}")
+            st.info("Please run: python -m nltk.downloader punkt")
+            raise
+
+# Initialize NLTK
+setup_nltk()
 
 # Page configuration
 st.set_page_config(
