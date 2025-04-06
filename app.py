@@ -319,6 +319,7 @@ class ProfileExtractor:
     def get_clean_text_from_url(self, url):
         """Extract and clean text from URL with improved error handling and multiple user agents."""
         if not url:
+            st.warning("No URL provided")
             return ""
         
         user_agents = [
@@ -330,9 +331,12 @@ class ProfileExtractor:
         headers = {'User-Agent': random.choice(user_agents)}
         
         try:
+            st.info(f"Fetching content from URL: {url}")
             # Add timeout and verify=False for better connection handling
             response = requests.get(url, headers=headers, timeout=15, verify=False)
             response.raise_for_status()
+            
+            st.info(f"Response status: {response.status_code}")
             
             # Parse with BeautifulSoup
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -348,16 +352,25 @@ class ProfileExtractor:
             article = soup.find('article') or soup.find(class_=re.compile(r'article|story|content|main'))
             if article:
                 content = article.get_text()
+                st.info("Found content using article tag strategy")
             
             # Strategy 2: Look for specific content divs
             if not content:
                 content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text'))
                 content = ' '.join(div.get_text() for div in content_divs)
+                if content:
+                    st.info("Found content using content divs strategy")
             
             # Strategy 3: Look for paragraphs
             if not content:
                 paragraphs = soup.find_all('p')
                 content = ' '.join(p.get_text() for p in paragraphs)
+                if content:
+                    st.info("Found content using paragraphs strategy")
+            
+            if not content:
+                st.warning("No content found using any extraction strategy")
+                return ""
             
             # Clean the extracted content
             content = re.sub(r'\s+', ' ', content)  # Normalize whitespace
@@ -376,13 +389,14 @@ class ProfileExtractor:
             for phrase in unwanted_phrases:
                 content = re.sub(rf'\b{phrase}\b', '', content, flags=re.IGNORECASE)
             
+            st.info(f"Extracted content length: {len(content)} characters")
             return content.strip()
             
         except requests.RequestException as e:
-            print(f"Error fetching URL: {str(e)}")
+            st.error(f"Error fetching URL: {str(e)}")
             return ""
         except Exception as e:
-            print(f"Error processing content: {str(e)}")
+            st.error(f"Error processing content: {str(e)}")
             return ""
 
     def extract_profiles(self, text):
@@ -677,6 +691,11 @@ def main():
                         text = extractor.get_clean_text_from_url(url)
                         if text:
                             st.success(f"✅ Successfully retrieved article content ({len(text)} characters)")
+                            
+                            # Display a sample of the extracted content
+                            st.info("Sample of extracted content:")
+                            st.text(text[:500] + "..." if len(text) > 500 else text)
+                            
                             profiles = extractor.extract_profiles(text)
                             
                             # Apply deduplication if enabled
@@ -690,7 +709,7 @@ def main():
                             
                             display_results(profiles)
                         else:
-                            st.warning("No profiles found in the article. Try:")
+                            st.warning("No content could be extracted from the URL. Try:")
                             st.info("1. Checking if the URL is accessible")
                             st.info("2. Pasting the article text directly in the Text Analysis tab")
                             st.info("3. Verifying that the article contains professional profiles")
