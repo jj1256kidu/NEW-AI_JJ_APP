@@ -279,43 +279,29 @@ class ProfileExtractor:
         self.seen_profiles.clear()
 
     def clean_name(self, name):
-        """Enhanced name cleaning with more flexible validation for real names."""
+        """Basic name cleaning with minimal validation."""
         if not name:
             return ""
         
         # Basic cleaning
         name = name.strip()
-        name = re.sub(r'\\s+', ' ', name)
-        
-        # Remove titles and common prefixes/suffixes
-        titles = r'(?:Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.|Sir|Madam|Miss|Shri|Smt|Jr\.|Sr\.|I|II|III|IV|V|MD|PhD|MBA|CPA|Esq\.)'
-        name = re.sub(f'^{titles}\\s*', '', name, flags=re.IGNORECASE)
-        name = re.sub(f'\\s*{titles}$', '', name, flags=re.IGNORECASE)
         
         # Remove numbers and special characters
         name = re.sub(r'[0-9]', '', name)
-        name = re.sub(r'[^\\w\\s\\-\\\']', '', name)
+        name = re.sub(r'[^\w\s\-\']', '', name)
         
         # Basic validation
         name = name.strip()
         if not name:
             return ""
-            
+        
         # Split into parts
         name_parts = name.split()
-        
-        # Must start with capital letters
-        if not all(part[0].isupper() for part in name_parts):
+        if not name_parts:
             return ""
-            
-        # Must not contain common non-name words
-        non_name_words = {
-            'city', 'state', 'country', 'region', 'district', 'zone',
-            'hello', 'hi', 'thanks', 'thank', 'welcome', 'good',
-            'app', 'tool', 'software', 'platform', 'system', 'service',
-            'brand', 'product', 'company', 'organization', 'institute'
-        }
-        if any(word.lower() in non_name_words for word in name_parts):
+        
+        # Must start with capital letter
+        if not name_parts[0][0].isupper():
             return ""
         
         # Capitalize each word
@@ -424,7 +410,7 @@ class ProfileExtractor:
             return ""
 
     def extract_profiles(self, text):
-        """Extract and clean professional profiles with improved name detection."""
+        """Extract profiles with simplified rules."""
         if not text:
             return []
         
@@ -432,89 +418,88 @@ class ProfileExtractor:
         profiles = []
         seen_names = set()
         
-        # Process text with enhanced context
-        sentences = list(doc.sents)
-        for i, sent in enumerate(sentences):
-            # Look for potential names using multiple methods
-            potential_names = set()
+        # First pass: Find all quoted statements and their speakers
+        quote_speakers = {}
+        quote_pattern = r'"([^"]+)"\s*(?:,\s*)?(?:said|says|according to)\s+([A-Z][a-zA-Z]+)'
+        for match in re.finditer(quote_pattern, text):
+            quote = match.group(1).strip()
+            speaker = match.group(2).strip()
+            if speaker:
+                quote_speakers[speaker] = quote
+        
+        # Second pass: Find company associations
+        company_associations = {}
+        company_patterns = [
+            (r'([A-Z][a-zA-Z]+)(?:\s+(?:of|from|at|with))?\s+([A-Z][A-Za-z0-9]+(?:\s*,?\s*(?:Inc|Ltd|LLC|Corp|Corporation|Company|Group|Technologies|Solutions))?)', 2),
+            (r'([A-Z][a-zA-Z]+)\s*,?\s*([A-Z][A-Za-z0-9]+(?:\s*,?\s*(?:Inc|Ltd|LLC|Corp|Corporation|Company|Group|Technologies|Solutions))?)', 2),
+        ]
+        
+        for pattern, group in company_patterns:
+            for match in re.finditer(pattern, text):
+                name = match.group(1).strip()
+                company = match.group(group).strip()
+                if name and company:
+                    company_associations[name] = company
+        
+        # Process sentences for additional context
+        for sent in doc.sents:
+            sent_text = sent.text
             
-            # Method 1: NER detection
+            # Look for names in the sentence
             for ent in sent.ents:
                 if ent.label_ == "PERSON":
-                    potential_names.add(ent.text)
+                    name = self.clean_name(ent.text)
+                    if not name or name in seen_names:
+                        continue
+                    
+                    # Check if we have a quote or company for this name
+                    quote = quote_speakers.get(name, "")
+                    company = company_associations.get(name, "")
+                    
+                    # If we have either a quote or company, create a profile
+                    if quote or company:
+                        # Look for designation in the sentence
+                        designation = ""
+                        designation_pattern = r'(?:is|was|as|serves?\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief|CEO|CTO|CFO|COO|CIO|President|Director|Manager|Lead|Head|Officer|Executive))'
+                        designation_match = re.search(designation_pattern, sent_text, re.IGNORECASE)
+                        if designation_match:
+                            designation = designation_match.group(1).strip()
+                        
+                        # Generate LinkedIn search URL
+                        search_terms = [name]
+                        if company:
+                            search_terms.append(company.split()[0])
+                        
+                        linkedin_url = (
+                            "https://www.google.com/search?q=LinkedIn+"
+                            + "+".join(search_terms).replace(" ", "+")
+                        )
+                        
+                        profile = {
+                            "name": name,
+                            "designation": designation,
+                            "company": company,
+                            "quote": quote,
+                            "linkedin_search": linkedin_url,
+                            "confidence": "high" if (company and quote) else "medium"
+                        }
+                        
+                        profiles.append(profile)
+                        seen_names.add(name)
             
-            # Method 2: Pattern matching for standard names
-            name_patterns = [
-                r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',  # Full names
-                r'([A-Z][a-z]{2,})',  # Single names when followed by company context
-            ]
-            
-            for pattern in name_patterns:
-                matches = re.finditer(pattern, sent.text)
-                for match in matches:
-                    potential_names.add(match.group(1))
-            
-            # Method 3: Look for quoted statements with attributions
-            quote_pattern = r'"([^"]+)"\s*(?:said|says|according to|told)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)'
-            quote_matches = re.finditer(quote_pattern, sent.text)
-            for match in quote_matches:
-                potential_names.add(match.group(2))
-            
-            # Get extended context (5 sentences window)
-            start_idx = max(0, i - 2)
-            end_idx = min(len(sentences), i + 3)
-            context_text = ' '.join(s.text for s in sentences[start_idx:end_idx])
-            
-            # Process each potential name
-            for raw_name in potential_names:
-                name = self.clean_name(raw_name)
-                if not name or name in seen_names:
-                    continue
-                
-                # Look for company affiliations
-                company_patterns = [
-                    r'(?:at|with|from|of|,?\s+(?:of|at|from))?\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:Inc\.|Ltd\.|LLC|Corp\.|Corporation|Company|Group|Technologies|Solutions))',
-                    r'([A-Z][A-Za-z0-9\s&\.\-]+)\'s\s+(?:executive|manager|director|officer|lead|head)',
-                    r'([A-Z][A-Za-z0-9\s&\.\-]+(?:Bank|Tech|Software|Systems|Digital|Global|International))'
-                ]
-                
-                companies = []
-                for pattern in company_patterns:
-                    matches = re.finditer(pattern, context_text)
-                    for match in matches:
-                        company = self.clean_text(match.group(1))
-                        if company and len(company.split()) <= 6:
-                            companies.append(company)
-                
-                # Look for designations
-                designation_patterns = [
-                    r'(?:is|was|as|serves?\s+as|joined\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief|CEO|CTO|CFO|COO|CIO|President|Director|Manager|Lead|Head|Officer))',
-                    r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Executive|Senior|Principal|Global|Regional|Technical|Engineering|Product|Project)\s+(?:Director|Manager|Lead|Officer|Head))',
-                ]
-                
-                designations = []
-                for pattern in designation_patterns:
-                    matches = re.finditer(pattern, context_text, re.IGNORECASE)
-                    for match in matches:
-                        designation = self.clean_text(match.group(1))
-                        if designation and len(designation.split()) <= 7:
-                            designations.append(designation)
-                
-                # Extract quotes
-                quotes = []
-                quote_pattern = r'"([^"]+)"'
-                quote_matches = re.finditer(quote_pattern, context_text)
-                for match in quote_matches:
-                    quote = match.group(1).strip()
-                    if 20 <= len(quote) <= 300:  # Adjusted length limits
-                        quotes.append(quote)
-                
-                # Create profile if we have enough information
-                if companies or designations or quotes:
+            # Also check for single-word names in quotes
+            for name, quote in quote_speakers.items():
+                if name not in seen_names:
+                    clean_name = self.clean_name(name)
+                    if not clean_name:
+                        continue
+                    
+                    company = company_associations.get(name, "")
+                    
                     # Generate LinkedIn search URL
-                    search_terms = [name]
-                    if companies:
-                        search_terms.append(companies[0].split()[0])
+                    search_terms = [clean_name]
+                    if company:
+                        search_terms.append(company.split()[0])
                     
                     linkedin_url = (
                         "https://www.google.com/search?q=LinkedIn+"
@@ -522,16 +507,16 @@ class ProfileExtractor:
                     )
                     
                     profile = {
-                        "name": name,
-                        "designation": ' | '.join(designations) if designations else "",
-                        "company": ' | '.join(companies) if companies else "",
-                        "quote": quotes[0] if quotes else "",
+                        "name": clean_name,
+                        "designation": "",
+                        "company": company,
+                        "quote": quote,
                         "linkedin_search": linkedin_url,
-                        "confidence": "high" if (companies and (designations or quotes)) else "medium"
+                        "confidence": "high" if company else "medium"
                     }
                     
                     profiles.append(profile)
-                    seen_names.add(name)
+                    seen_names.add(clean_name)
         
         return profiles
 
