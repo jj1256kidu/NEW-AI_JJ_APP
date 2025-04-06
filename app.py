@@ -291,7 +291,7 @@ class ProfileExtractor:
         ]
 
     def get_clean_text_from_url(self, url):
-        """Get and clean text content from a URL with improved error handling."""
+        """Get clean article content from URL with precise extraction."""
         if not url:
             return "No URL provided"
 
@@ -299,6 +299,17 @@ class ProfileExtractor:
             # Validate URL format
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
+            
+            # Check for problematic domains
+            problematic_domains = [
+                'indiatimes.com', 'timesofindia.indiatimes.com',
+                'hindustantimes.com', 'thehindu.com'
+            ]
+            if any(domain in url for domain in problematic_domains):
+                return (
+                    "⚠️ This news site may have restrictions. "
+                    "Please copy and paste the article content directly in the 'Text Analysis' tab."
+                )
             
             # First try with requests
             try:
@@ -318,8 +329,8 @@ class ProfileExtractor:
                         selenium_content = self._get_text_with_selenium(url)
                         if selenium_content and len(selenium_content.split()) > len(content.split()):
                             content = selenium_content
-                    except Exception as e:
-                        print(f"Selenium extraction failed: {str(e)}")
+                    except Exception:
+                        pass
                 
                 if not content or len(content.split()) < 20:
                     return "Could not extract meaningful content from the URL. Please check if the URL is correct and accessible."
@@ -328,16 +339,13 @@ class ProfileExtractor:
 
             except requests.RequestException as e:
                 error_msg = f"Error fetching URL: {str(e)}"
-                print(error_msg)
-                
-                # Try selenium as fallback
                 try:
+                    # Try selenium as fallback
                     content = self._get_text_with_selenium(url)
                     if content and len(content.split()) >= 20:
                         return content
-                except Exception as se:
-                    print(f"Selenium fallback failed: {str(se)}")
-                
+                except Exception:
+                    pass
                 return error_msg
 
         except Exception as e:
@@ -413,11 +421,14 @@ class ProfileExtractor:
             return f"Error with Selenium extraction: {str(e)}"
 
     def _extract_content_from_html(self, html):
-        """Extract and clean content from HTML."""
+        """Extract and clean content from HTML with precise targeting."""
         soup = BeautifulSoup(html, 'html.parser')
         
         # Remove unwanted elements
-        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe', 'noscript', 'aside', 'form']):
+        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe', 
+                           'noscript', 'aside', 'form', 'ad', 'ads', 'advertisement',
+                           'trending', 'subscribe', 'newsletter', 'related', 'popular',
+                           'comments', 'social', 'share', 'recommended']):
             element.decompose()
         
         # Try multiple content extraction strategies
@@ -578,10 +589,8 @@ class ProfileExtractor:
         pattern = '|'.join(map(re.escape, unwanted_phrases))
         content = re.sub(rf'\b(?:{pattern})\b', '', content, flags=re.IGNORECASE)
         
-        # Remove URLs
+        # Remove URLs and email addresses
         content = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', content)
-        
-        # Remove email addresses
         content = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', '', content)
         
         # Remove multiple spaces and normalize punctuation
@@ -794,7 +803,7 @@ def validate_profile(name, designation, company, context):
 
 def display_results(profiles):
     if not profiles:
-        st.warning("No profiles found. Try with different content or ensure the text contains professional profiles.")
+        st.warning("No profiles found.")
         return
     
     # Calculate metrics
@@ -838,15 +847,24 @@ def display_results(profiles):
             unsafe_allow_html=True
         )
 
-    # Create DataFrame
+    # Create DataFrame with clean formatting
     df = pd.DataFrame(profiles)
+    df['confidence'] = df['confidence'].apply(lambda x: f"{x:.0f}%")
     
     # Display results
     st.markdown("### 📋 Extracted Profiles")
     st.dataframe(
         df,
         use_container_width=True,
-        height=400
+        height=400,
+        column_config={
+            "name": "Name",
+            "designation": "Designation",
+            "company": "Company",
+            "quotes": st.column_config.ListColumn("Quotes"),
+            "linkedin_search": st.column_config.LinkColumn("LinkedIn Search"),
+            "confidence": "Confidence"
+        }
     )
     
     # Download options
