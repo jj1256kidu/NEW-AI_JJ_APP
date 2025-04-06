@@ -441,77 +441,135 @@ class ProfileExtractor:
         # Process text with enhanced context
         sentences = list(doc.sents)
         for i, sent in enumerate(sentences):
+            # Look for potential names using both NER and pattern matching
+            potential_names = []
+            
+            # Add NER detected names
             for ent in sent.ents:
                 if ent.label_ == "PERSON":
-                    name = self.clean_name(ent.text)
-                    if not name or name in seen_names:
-                        continue
+                    potential_names.append(ent.text)
+            
+            # Add pattern-matched names
+            name_pattern = r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)'
+            pattern_matches = re.finditer(name_pattern, sent.text)
+            for match in pattern_matches:
+                potential_names.append(match.group(1))
+            
+            # Process each potential name
+            for name in potential_names:
+                name = self.clean_name(name)
+                if not name or name in seen_names:
+                    continue
+                
+                # Get extended context
+                context = get_extended_context(doc, i)
+                
+                # Extract designations and companies with context
+                designations = []
+                companies = []
+                quotes = []
+                
+                # Process patterns with context awareness
+                for pattern in designation_patterns:
+                    matches = re.finditer(pattern, context['text'], re.IGNORECASE)
+                    for match in matches:
+                        designation = self.clean_text(match.group(1))
+                        if designation and len(designation.split()) <= 7:
+                            designations.append(designation)
+                
+                for pattern in company_patterns:
+                    matches = re.finditer(pattern, context['text'])
+                    for match in matches:
+                        company = self.clean_text(match.group(1))
+                        if company and len(company.split()) <= 6:
+                            companies.append(company)
+                
+                # Extract quotes
+                quote_pattern = r'["\'«]([^"\'»]+)["\'»]'
+                quote_matches = re.finditer(quote_pattern, context['text'])
+                for match in quote_matches:
+                    quote = match.group(1).strip()
+                    if len(quote) > 20 and len(quote) < 200:  # Reasonable quote length
+                        quotes.append(quote)
+                
+                # Validate and create profile
+                if designations or companies:
+                    validation_result = validate_profile(
+                        name,
+                        designations[0] if designations else "",
+                        companies[0] if companies else "",
+                        context
+                    )
                     
-                    # Get extended context
-                    context = get_extended_context(doc, i)
-                    
-                    # Extract designations and companies with context
-                    designations = []
-                    companies = []
-                    quotes = []
-                    
-                    # Process patterns with context awareness
-                    for pattern in designation_patterns:
-                        matches = re.finditer(pattern, context['text'], re.IGNORECASE)
-                        for match in matches:
-                            designation = self.clean_text(match.group(1))
-                            if designation and len(designation.split()) <= 7:
-                                designations.append(designation)
-                    
-                    for pattern in company_patterns:
-                        matches = re.finditer(pattern, context['text'])
-                        for match in matches:
-                            company = self.clean_text(match.group(1))
-                            if company and len(company.split()) <= 6:
-                                companies.append(company)
-                    
-                    # Extract quotes
-                    quote_pattern = r'["\'«]([^"\'»]+)["\'»]'
-                    quote_matches = re.finditer(quote_pattern, context['text'])
-                    for match in quote_matches:
-                        quote = match.group(1).strip()
-                        if len(quote) > 20 and len(quote) < 200:  # Reasonable quote length
-                            quotes.append(quote)
-                    
-                    # Validate and create profile
-                    if designations or companies:
-                        validation_result = validate_profile(
-                            name,
-                            designations[0] if designations else "",
-                            companies[0] if companies else "",
-                            context
+                    if validation_result['is_valid']:
+                        # Generate LinkedIn search URL
+                        search_terms = [name]
+                        if companies:
+                            search_terms.append(companies[0].split()[0])
+                        
+                        linkedin_url = (
+                            "https://www.google.com/search?q=LinkedIn+"
+                            + "+".join(search_terms).replace(" ", "+")
                         )
                         
-                        if validation_result['is_valid']:
-                            # Generate LinkedIn search URL
-                            search_terms = [name]
-                            if companies:
-                                search_terms.append(companies[0].split()[0])
-                            
-                            linkedin_url = (
-                                "https://www.google.com/search?q=LinkedIn+"
-                                + "+".join(search_terms).replace(" ", "+")
-                            )
-                            
-                            profile = {
-                                "name": name,
-                                "designation": ' | '.join(designations) if designations else "",
-                                "company": ' | '.join(companies) if companies else "",
-                                "quote": quotes[0] if quotes else "",
-                                "linkedin_search": linkedin_url,
-                                "confidence": validation_result['confidence'],
-                                "score": validation_result['score']
-                            }
-                            
-                            profiles.append(profile)
-                            seen_names.add(name)
+                        profile = {
+                            "name": name,
+                            "designation": ' | '.join(designations) if designations else "",
+                            "company": ' | '.join(companies) if companies else "",
+                            "quote": quotes[0] if quotes else "",
+                            "linkedin_search": linkedin_url,
+                            "confidence": validation_result['confidence'],
+                            "score": validation_result['score']
+                        }
+                        
+                        profiles.append(profile)
+                        seen_names.add(name)
         
         return profiles
+
+def validate_profile(name, designation, company, context):
+    """Enhanced profile validation with scoring system."""
+    score = 0
+    confidence = "low"
+    
+    # Name validation (0-2 points)
+    if name and len(name.split()) >= 2:
+        score += 1
+        if re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$', name):  # Proper capitalization
+            score += 1
+    
+    # Designation validation (0-2 points)
+    if designation:
+        score += 1
+        if len(designation.split()) >= 2:  # Detailed designation
+            score += 1
+    
+    # Company validation (0-2 points)
+    if company:
+        score += 1
+        if len(company.split()) >= 2:  # Multi-word company name
+            score += 1
+    
+    # Context validation (0-2 points)
+    context_lower = context['text'].lower()
+    if any(term in context_lower for term in ['joined', 'appointed', 'promoted', 'leads', 'heading']):
+        score += 1
+    if any(term in context_lower for term in ['years', 'experience', 'professional', 'career']):
+        score += 1
+    
+    # Determine confidence level
+    if score >= 4:  # Lowered threshold from 5 to 4
+        confidence = "very_high"
+    elif score >= 3:
+        confidence = "high"
+    elif score >= 2:  # Lowered threshold from 3 to 2
+        confidence = "medium"
+    
+    return {
+        'is_valid': score >= 2,  # Lowered threshold from 3 to 2
+        'score': score,
+        'confidence': confidence
+    }
 
 def display_results(profiles):
     if not profiles:
