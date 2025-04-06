@@ -244,6 +244,7 @@ class ProfileExtractor:
     def __init__(self):
         self.nlp = load_nlp_model()
         self.session = requests.Session()
+        self.seen_profiles = set()  # Cache for deduplication
         
         # Common name prefixes
         self.name_prefixes = {
@@ -258,6 +259,24 @@ class ProfileExtractor:
             'today', 'yesterday', 'tomorrow', 'news', 'latest', 'breaking',
             'digi', 'yatra', 'article', 'update'
         }
+
+    def get_profile_key(self, name, company):
+        """Generate a unique key for deduplication."""
+        return f"{name.lower()}|{company.lower()}" if company else name.lower()
+
+    def is_duplicate(self, name, company):
+        """Check if a profile is a duplicate based on name and company."""
+        key = self.get_profile_key(name, company)
+        return key in self.seen_profiles
+
+    def add_to_cache(self, name, company):
+        """Add a profile to the deduplication cache."""
+        key = self.get_profile_key(name, company)
+        self.seen_profiles.add(key)
+
+    def clear_cache(self):
+        """Clear the deduplication cache."""
+        self.seen_profiles.clear()
 
     def clean_name(self, name):
         """Enhanced name cleaning with better validation."""
@@ -641,6 +660,10 @@ def main():
     st.markdown('<p class="tagline">Smarter Prospecting Starts with News ⚡</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-tagline">Where News Sparks the Next Deal 🎯</p>', unsafe_allow_html=True)
 
+    # Add deduplication toggle
+    deduplicate = st.checkbox("Enable deduplication across articles", value=True,
+                            help="Prevents the same person from appearing multiple times across different articles")
+
     tab1, tab2 = st.tabs(["📰 URL Analysis", "Text Analysis"])
 
     extractor = ProfileExtractor()
@@ -655,6 +678,16 @@ def main():
                         if text:
                             st.success(f"✅ Successfully retrieved article content ({len(text)} characters)")
                             profiles = extractor.extract_profiles(text)
+                            
+                            # Apply deduplication if enabled
+                            if deduplicate:
+                                unique_profiles = []
+                                for profile in profiles:
+                                    if not extractor.is_duplicate(profile['name'], profile['company']):
+                                        unique_profiles.append(profile)
+                                        extractor.add_to_cache(profile['name'], profile['company'])
+                                profiles = unique_profiles
+                            
                             display_results(profiles)
                         else:
                             st.warning("No profiles found in the article. Try:")
@@ -674,9 +707,24 @@ def main():
             if text_input:
                 with st.spinner("🔍 Processing text..."):
                     profiles = extractor.extract_profiles(text_input)
+                    
+                    # Apply deduplication if enabled
+                    if deduplicate:
+                        unique_profiles = []
+                        for profile in profiles:
+                            if not extractor.is_duplicate(profile['name'], profile['company']):
+                                unique_profiles.append(profile)
+                                extractor.add_to_cache(profile['name'], profile['company'])
+                        profiles = unique_profiles
+                    
                     display_results(profiles)
             else:
                 st.warning("⚠️ Please enter some text")
+
+    # Add clear cache button
+    if deduplicate and st.button("Clear deduplication cache"):
+        extractor.clear_cache()
+        st.success("✅ Deduplication cache cleared")
 
     st.markdown(
         """
