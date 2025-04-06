@@ -22,6 +22,12 @@ import nltk
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Download required NLTK data
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt', quiet=True)
+
 # Page configuration
 st.set_page_config(
     page_title="NewsNex – From News to Next Opportunities",
