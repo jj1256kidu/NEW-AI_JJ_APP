@@ -6,3 +6,7 @@ pandas>=2.1.4
 requests==2.31.0
 beautifulsoup4==4.12.2
 openpyxl==3.1.2
+selenium>=4.17.2
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.23.0
+urllib3>=2.1.0
