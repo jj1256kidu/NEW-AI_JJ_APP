@@ -288,312 +288,187 @@ class ProfileExtractor:
     def __init__(self):
         self.nlp = load_nlp_model()
         self.session = requests.Session()
-        self.seen_profiles = set()
-        self.driver = None
-        self.profile_cache = set()  # Add cache for deduplication
+        self.seen_profiles = set()  # Cache for deduplication
         
-        # Load designation patterns
-        self.designation_patterns = [
-            r'(?:is|was|as|serves?\s+as|joined\s+as|appointed\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief|CEO|CTO|CFO|COO|CIO|President|Director|Manager|Lead|Head|Officer|Executive))',
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Executive|Senior|Principal|Global|Regional|Technical|Engineering|Product|Project)\s+(?:Director|Manager|Lead|Officer|Head))',
-            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Founder|Co-founder|Partner|Managing Partner|General Partner|VP|Vice President|SVP|EVP))',
-        ]
+        # Common name prefixes
+        self.name_prefixes = {
+            'mr', 'mrs', 'ms', 'dr', 'prof', 'shri', 'smt', 'sir',
+            'justice', 'adv', 'advocate', 'ca', 'er', 'eng'
+        }
         
-        # Load company patterns
-        self.company_patterns = [
-            r'(?:at|with|from|of|,?\s+(?:of|at|from))?\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:Inc\.|Ltd\.|LLC|Corp\.|Corporation|Company|Group|Technologies|Solutions))',
-            r'([A-Z][A-Za-z0-9\s&\.\-]+)\'s\s+(?:executive|manager|director|officer|lead|head)',
-            r'([A-Z][A-Za-z0-9\s&\.\-]+(?:Bank|Tech|Software|Systems|Digital|Global|International))'
-        ]
+        # Invalid terms for filtering
+        self.invalid_terms = {
+            'india', 'china', 'usa', 'uk', 'europe', 'asia', 'africa',
+            'america', 'australia', 'canada', 'japan', 'russia',
+            'today', 'yesterday', 'tomorrow', 'news', 'latest', 'breaking',
+            'digi', 'yatra', 'article', 'update'
+        }
+
+    def get_profile_key(self, name, company):
+        """Generate a unique key for deduplication."""
+        return f"{name.lower()}|{company.lower()}" if company else name.lower()
 
     def is_duplicate(self, name, company):
         """Check if a profile is a duplicate based on name and company."""
-        profile_key = f"{name.lower()}_{company.lower()}" if company else name.lower()
-        return profile_key in self.profile_cache
+        key = self.get_profile_key(name, company)
+        return key in self.seen_profiles
 
     def add_to_cache(self, name, company):
         """Add a profile to the deduplication cache."""
-        profile_key = f"{name.lower()}_{company.lower()}" if company else name.lower()
-        self.profile_cache.add(profile_key)
+        key = self.get_profile_key(name, company)
+        self.seen_profiles.add(key)
 
     def clear_cache(self):
         """Clear the deduplication cache."""
-        self.profile_cache.clear()
-
-    def get_clean_text_from_url(self, url):
-        """Get clean article content from URL with precise extraction."""
-        if not url:
-            return "No URL provided"
-
-        try:
-            # Validate URL format
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-            
-            # Check for problematic domains
-            problematic_domains = [
-                'indiatimes.com', 'timesofindia.indiatimes.com',
-                'hindustantimes.com', 'thehindu.com'
-            ]
-            if any(domain in url for domain in problematic_domains):
-                return (
-                    "⚠️ This news site may have restrictions. "
-                    "Please copy and paste the article content directly in the 'Text Analysis' tab."
-                )
-            
-            # First try with requests
-            try:
-                response = requests.get(url, headers=self.headers, timeout=30)
-                response.raise_for_status()
-                
-                # Check content type
-                content_type = response.headers.get('content-type', '')
-                if 'text/html' not in content_type:
-                    return f"URL does not contain HTML content. Content type: {content_type}"
-                
-                content = self._extract_content_from_html(response.text)
-                
-                # If content is too short, try with selenium if available
-                if len(content.split()) < 50:
-                    try:
-                        selenium_content = self._get_text_with_selenium(url)
-                        if selenium_content and len(selenium_content.split()) > len(content.split()):
-                            content = selenium_content
-                    except Exception:
-                        pass
-                
-                if not content or len(content.split()) < 20:
-                    return "Could not extract meaningful content from the URL. Please check if the URL is correct and accessible."
-                
-                return content
-
-            except requests.RequestException as e:
-                error_msg = f"Error fetching URL: {str(e)}"
-                try:
-                    # Try selenium as fallback
-                    content = self._get_text_with_selenium(url)
-                    if content and len(content.split()) >= 20:
-                        return content
-                except Exception:
-                    pass
-                return error_msg
-
-        except Exception as e:
-            return f"Unexpected error processing URL: {str(e)}"
-
-    def _get_text_with_requests(self, url):
-        """Extract text using requests."""
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Cache-Control': 'max-age=0'
-            }
-            
-            response = self.session.get(url, headers=headers, timeout=15, verify=False)
-            response.raise_for_status()
-            
-            return self._extract_content_from_html(response.text)
-        except:
-            return ""
-
-    def _get_text_with_selenium(self, url):
-        """Extract text using Selenium with improved error handling."""
-        try:
-            from selenium import webdriver
-            from selenium.webdriver.chrome.options import Options
-            from selenium.webdriver.common.by import By
-            from selenium.webdriver.support.ui import WebDriverWait
-            from selenium.webdriver.support import expected_conditions as EC
-            
-            # Setup Chrome options
-            chrome_options = Options()
-            chrome_options.add_argument('--headless')
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument('--window-size=1920,1080')
-            chrome_options.add_argument('--disable-notifications')
-            chrome_options.add_argument('--disable-extensions')
-            chrome_options.add_argument('--disable-popup-blocking')
-            chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-            chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
-            
-            # Initialize driver
-            driver = webdriver.Chrome(options=chrome_options)
-            
-            try:
-                # Load page
-                driver.get(url)
-                
-                # Wait for content to load
-                wait = WebDriverWait(driver, 10)
-                wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-                
-                # Get page source
-                html = driver.page_source
-                
-                # Extract content
-                content = self._extract_content_from_html(html)
-                
-                return content
-                
-            finally:
-                driver.quit()
-                
-        except ImportError:
-            return "Selenium is not available. Please install it for enhanced URL processing."
-        except Exception as e:
-            return f"Error with Selenium extraction: {str(e)}"
-
-    def _extract_content_from_html(self, html):
-        """Extract and clean content from HTML with precise targeting."""
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        # Remove unwanted elements
-        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe', 
-                           'noscript', 'aside', 'form', 'ad', 'ads', 'advertisement',
-                           'trending', 'subscribe', 'newsletter', 'related', 'popular',
-                           'comments', 'social', 'share', 'recommended']):
-            element.decompose()
-        
-        # Try multiple content extraction strategies
-        content = ""
-        
-        # Strategy 1: Look for article content with common class names
-        article_classes = [
-            'article-content', 'story-content', 'main-content',
-            'article-body', 'story-body', 'content-body',
-            'entry-content', 'post-content', 'article__content',
-            'article__body', 'story__content', 'story__body',
-            'cms-content', 'paywall-article-content'
-        ]
-        
-        for class_name in article_classes:
-            article = soup.find(['article', 'div', 'section'], class_=class_name)
-            if article:
-                content = article.get_text(separator=' ', strip=True)
-                break
-        
-        # Strategy 2: Look for article tag or main content div
-        if not content:
-            article = (
-                soup.find('article') or 
-                soup.find(['div', 'section'], class_=re.compile(r'article|story|content|main|post|entry', re.I)) or
-                soup.find('main')
-            )
-            if article:
-                content = article.get_text(separator=' ', strip=True)
-        
-        # Strategy 3: Look for paragraphs within content divs
-        if not content:
-            content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text|body|main', re.I))
-            paragraphs = []
-            for div in content_divs:
-                paragraphs.extend(div.find_all('p'))
-            if paragraphs:
-                content = ' '.join(p.get_text(strip=True) for p in paragraphs)
-        
-        # Strategy 4: Fall back to all paragraphs
-        if not content:
-            paragraphs = soup.find_all('p')
-            content = ' '.join(p.get_text(strip=True) for p in paragraphs)
-        
-        # If still no content, try getting all text
-        if not content:
-            content = soup.get_text(separator=' ', strip=True)
-        
-        return self.clean_article_content(content)
+        self.seen_profiles.clear()
 
     def clean_name(self, name):
-        """Clean and validate names with stricter rules."""
+        """Basic name cleaning with minimal validation."""
         if not name:
             return ""
         
         # Basic cleaning
         name = name.strip()
+        
+        # Remove numbers and special characters
         name = re.sub(r'[0-9]', '', name)
         name = re.sub(r'[^\w\s\-\']', '', name)
+        
+        # Basic validation
+        name = name.strip()
+        if not name:
+            return ""
         
         # Split into parts
         name_parts = name.split()
         if not name_parts:
             return ""
         
-        # Must have at least first and last name
-        if len(name_parts) < 2:
-            return ""
-        
-        # Each part must be at least 2 characters
-        if any(len(part) < 2 for part in name_parts):
-            return ""
-        
         # Must start with capital letter
-        if not all(part[0].isupper() for part in name_parts):
+        if not name_parts[0][0].isupper():
             return ""
-        
-        # Check against common non-name words
-        non_name_words = {
-            'city', 'state', 'country', 'region', 'district',
-            'company', 'organization', 'institute', 'university',
-            'news', 'article', 'story', 'report', 'update',
-            'today', 'yesterday', 'tomorrow', 'website'
-        }
-        
-        # Use fuzzy matching to check for non-name words
-        for part in name_parts:
-            if any(fuzz.ratio(part.lower(), word) > 85 for word in non_name_words):
-                return ""
         
         # Capitalize each word
         name = ' '.join(word.capitalize() for word in name_parts)
         
         return name
 
-    def validate_designation(self, designation):
-        """Validate designation with fuzzy matching."""
-        if not designation:
-            return False
-        
-        valid_titles = [
-            'Chief', 'CEO', 'CTO', 'CFO', 'COO', 'CIO',
-            'President', 'Director', 'Manager', 'Lead',
-            'Head', 'Officer', 'Executive', 'Founder',
-            'Partner', 'VP', 'Vice President'
-        ]
-        
-        # Check if any valid title appears in the designation
-        return any(
-            any(fuzz.partial_ratio(title.lower(), word.lower()) > 85
-                for word in designation.split())
-            for title in valid_titles
-        )
+    def clean_text(self, text):
+        """Clean and standardize extracted text."""
+        if not text:
+            return ""
+        # Remove unwanted characters and normalize spacing
+        text = text.strip()
+        text = re.sub(r'\\s+', ' ', text)
+        text = re.sub(r'[^\\w\\s&\\-\\.]', '', text)
+        return text.strip()
 
-    def validate_company(self, company):
-        """Validate company name with fuzzy matching."""
-        if not company:
-            return False
+    def get_clean_text_from_url(self, url):
+        """Extract and clean text from URL with improved handling for modern news sites."""
+        if not url:
+            return ""
         
-        # Company must start with capital letter and have at least 2 characters
-        if len(company) < 2 or not company[0].isupper():
-            return False
-        
-        # Check against common non-company words
-        non_company_words = {
-            'news', 'article', 'story', 'report', 'update',
-            'today', 'yesterday', 'tomorrow', 'website'
+        # Modern browser headers
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'DNT': '1',
+            'Cache-Control': 'max-age=0'
         }
         
-        # Use fuzzy matching to check for non-company words
-        return not any(
-            fuzz.ratio(company.lower(), word) > 85
-            for word in non_company_words
-        )
-
+        try:
+            # Create a session to handle cookies and redirects
+            session = requests.Session()
+            
+            # First request to handle redirects and get cookies
+            response = session.get(
+                url,
+                headers=headers,
+                timeout=30,
+                verify=False,
+                allow_redirects=True
+            )
+            response.raise_for_status()
+            
+            # Parse with BeautifulSoup
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Remove unwanted elements
+            for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe', 'noscript', 'aside', 'form']):
+                element.decompose()
+            
+            # Initialize content
+            content = ""
+            
+            # Strategy 1: Look for article content with common class names
+            article_classes = [
+                'article-content',
+                'story-content',
+                'main-content',
+                'article-body',
+                'story-body',
+                'content-body',
+                'entry-content',
+                'post-content',
+                'article__content',
+                'article__body',
+                'story__content',
+                'story__body',
+                'cms-content',
+                'paywall-article-content'
+            ]
+            
+            for class_name in article_classes:
+                article = soup.find(['article', 'div', 'section'], class_=class_name)
+                if article:
+                    content = article.get_text(separator=' ', strip=True)
+                    break
+            
+            # Strategy 2: Look for article tag or main content div
+            if not content:
+                article = (
+                    soup.find('article') or 
+                    soup.find(['div', 'section'], class_=re.compile(r'article|story|content|main|post|entry', re.I)) or
+                    soup.find('main')
+                )
+                if article:
+                    content = article.get_text(separator=' ', strip=True)
+            
+            # Strategy 3: Look for paragraphs within content divs
+            if not content:
+                content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text|body|main', re.I))
+                paragraphs = []
+                for div in content_divs:
+                    paragraphs.extend(div.find_all('p'))
+                if paragraphs:
+                    content = ' '.join(p.get_text(strip=True) for p in paragraphs)
+            
+            # Strategy 4: Fall back to all paragraphs if no content found
+            if not content:
+                paragraphs = soup.find_all('p')
+                content = ' '.join(p.get_text(strip=True) for p in paragraphs)
+            
+            if not content:
+                return ""
+            
+            # Clean the content
+            content = self.clean_article_content(content)
+            
+            return content
+            
+        except requests.RequestException:
+            return ""
+        except Exception:
+            return ""
+    
     def clean_article_content(self, content):
         """Clean and normalize article content."""
         if not content:
@@ -604,23 +479,48 @@ class ProfileExtractor:
         
         # Remove common unwanted phrases
         unwanted_phrases = [
-            'cookie consent', 'privacy policy', 'terms of service',
-            'advertisement', 'subscribe now', 'share this article',
-            'read more', 'click here', 'follow us', 'related articles',
-            'also read', 'more from', 'newsletter', 'sign up', 'log in',
-            'register', 'download app', 'install app', 'copyright',
-            'all rights reserved', 'please wait', 'loading',
-            'sponsored content', 'advertisement', 'recommended for you',
-            'trending now', 'popular stories', 'share on', 'bookmark',
-            'print article', 'save article', 'comments'
+            'cookie consent',
+            'privacy policy',
+            'terms of service',
+            'advertisement',
+            'subscribe now',
+            'share this article',
+            'read more',
+            'click here',
+            'follow us',
+            'related articles',
+            'also read',
+            'more from',
+            'newsletter',
+            'sign up',
+            'log in',
+            'register',
+            'download app',
+            'install app',
+            'copyright',
+            'all rights reserved',
+            'please wait',
+            'loading',
+            'sponsored content',
+            'advertisement',
+            'recommended for you',
+            'trending now',
+            'popular stories',
+            'share on',
+            'bookmark',
+            'print article',
+            'save article',
+            'comments'
         ]
         
         # Create a pattern that matches any of these phrases
         pattern = '|'.join(map(re.escape, unwanted_phrases))
         content = re.sub(rf'\b(?:{pattern})\b', '', content, flags=re.IGNORECASE)
         
-        # Remove URLs and email addresses
+        # Remove URLs
         content = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', content)
+        
+        # Remove email addresses
         content = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', '', content)
         
         # Remove multiple spaces and normalize punctuation
@@ -632,129 +532,95 @@ class ProfileExtractor:
         
         return content
 
-    def extract_quotes(self, text, name):
-        """Extract and validate quotes attributed to a person."""
-        if not text or not name:
-            return []
-        
-        quotes = []
-        
-        # Pattern 1: Direct quotes with attribution
-        patterns = [
-            # "Quote," said Name
-            rf'"([^"]+)"\s*,?\s*(?:said|says|according to|told)\s+{re.escape(name)}',
-            # Name said: "Quote"
-            rf'{re.escape(name)}\s+(?:said|says|added|noted|mentioned|explained|stated|commented):\s*"([^"]+)"',
-            # According to Name, "Quote"
-            rf'(?:According to|As per)\s+{re.escape(name)}[^"]*"([^"]+)"',
-            # Name: "Quote"
-            rf'{re.escape(name)}:\s*"([^"]+)"'
-        ]
-        
-        for pattern in patterns:
-            matches = re.finditer(pattern, text, re.IGNORECASE)
-            for match in matches:
-                quote = match.group(1).strip()
-                if self.validate_quote(quote):
-                    quotes.append(quote)
-        
-        return quotes
-
-    def validate_quote(self, quote):
-        """Validate a quote based on various criteria."""
-        if not quote:
-            return False
-        
-        # Length validation (20-500 characters)
-        if len(quote) < 20 or len(quote) > 500:
-            return False
-        
-        # Must contain word characters
-        if not re.search(r'\w', quote):
-            return False
-        
-        # Should not be just a URL or email
-        if re.match(r'^https?://|^[\w\.-]+@[\w\.-]+\.\w+$', quote):
-            return False
-        
-        # Should not be just numbers or special characters
-        if not re.search(r'[a-zA-Z]{3,}', quote):
-            return False
-        
-        return True
-
-    def calculate_confidence_score(self, name, designation, company, quotes):
-        """Calculate confidence score for a profile."""
-        score = 0
-        max_score = 10
-        
-        # Name scoring (0-2 points)
-        if name:
-            score += 1
-            if len(name.split()) >= 2:  # Full name
-                score += 1
-        
-        # Designation scoring (0-3 points)
-        if designation:
-            score += 1
-            if len(designation.split()) >= 2:  # Detailed designation
-                score += 1
-            if self.validate_designation(designation):  # Valid designation
-                score += 1
-        
-        # Company scoring (0-2 points)
-        if company:
-            score += 1
-            if self.validate_company(company):  # Valid company
-                score += 1
-        
-        # Quote scoring (0-3 points)
-        if quotes:
-            score += 1
-            if len(quotes) >= 2:  # Multiple quotes
-                score += 1
-            if any(len(quote.split()) > 10 for quote in quotes):  # Substantial quote
-                score += 1
-        
-        # Calculate percentage and determine confidence level
-        confidence_percent = (score / max_score) * 100
-        return confidence_percent
-
     def extract_profiles(self, text):
-        """Extract profiles from text with enhanced validation."""
+        """Extract profiles with simplified rules."""
         if not text:
             return []
-
+        
+        doc = self.nlp(text)
         profiles = []
-        seen_profiles = set()
+        seen_names = set()
         
-        # Find potential profile sections
-        sentences = nltk.sent_tokenize(text)
+        # First pass: Find all quoted statements and their speakers
+        quote_speakers = {}
+        quote_pattern = r'"([^"]+)"\s*(?:,\s*)?(?:said|says|according to)\s+([A-Z][a-zA-Z]+)'
+        for match in re.finditer(quote_pattern, text):
+            quote = match.group(1).strip()
+            speaker = match.group(2).strip()
+            if speaker:
+                quote_speakers[speaker] = quote
         
-        for i, sentence in enumerate(sentences):
-            # Get context (previous and next sentences)
-            context_start = max(0, i - 2)
-            context_end = min(len(sentences), i + 3)
-            context = ' '.join(sentences[context_start:context_end])
+        # Second pass: Find company associations
+        company_associations = {}
+        company_patterns = [
+            (r'([A-Z][a-zA-Z]+)(?:\s+(?:of|from|at|with))?\s+([A-Z][A-Za-z0-9]+(?:\s*,?\s*(?:Inc|Ltd|LLC|Corp|Corporation|Company|Group|Technologies|Solutions))?)', 2),
+            (r'([A-Z][a-zA-Z]+)\s*,?\s*([A-Z][A-Za-z0-9]+(?:\s*,?\s*(?:Inc|Ltd|LLC|Corp|Corporation|Company|Group|Technologies|Solutions))?)', 2),
+        ]
+        
+        for pattern, group in company_patterns:
+            for match in re.finditer(pattern, text):
+                name = match.group(1).strip()
+                company = match.group(group).strip()
+                if name and company:
+                    company_associations[name] = company
+        
+        # Process sentences for additional context
+        for sent in doc.sents:
+            sent_text = sent.text
             
-            # Extract names
-            doc = self.nlp(sentence)
-            for ent in doc.ents:
+            # Look for names in the sentence
+            for ent in sent.ents:
                 if ent.label_ == "PERSON":
                     name = self.clean_name(ent.text)
-                    if not name or self.is_duplicate(name):
+                    if not name or name in seen_names:
                         continue
                     
-                    # Extract designation and company
-                    designation, company = self.extract_designation_and_company(context)
-                    if not designation and not company:
+                    # Check if we have a quote or company for this name
+                    quote = quote_speakers.get(name, "")
+                    company = company_associations.get(name, "")
+                    
+                    # If we have either a quote or company, create a profile
+                    if quote or company:
+                        # Look for designation in the sentence
+                        designation = ""
+                        designation_pattern = r'(?:is|was|as|serves?\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief|CEO|CTO|CFO|COO|CIO|President|Director|Manager|Lead|Head|Officer|Executive))'
+                        designation_match = re.search(designation_pattern, sent_text, re.IGNORECASE)
+                        if designation_match:
+                            designation = designation_match.group(1).strip()
+                        
+                        # Generate LinkedIn search URL
+                        search_terms = [name]
+                        if company:
+                            search_terms.append(company.split()[0])
+                        
+                        linkedin_url = (
+                            "https://www.google.com/search?q=LinkedIn+"
+                            + "+".join(search_terms).replace(" ", "+")
+                        )
+                        
+                        profile = {
+                            "name": name,
+                            "designation": designation,
+                            "company": company,
+                            "quote": quote,
+                            "linkedin_search": linkedin_url,
+                            "confidence": "high" if (company and quote) else "medium"
+                        }
+                        
+                        profiles.append(profile)
+                        seen_names.add(name)
+            
+            # Also check for single-word names in quotes
+            for name, quote in quote_speakers.items():
+                if name not in seen_names:
+                    clean_name = self.clean_name(name)
+                    if not clean_name:
                         continue
                     
-                    # Extract quotes
-                    quotes = self.extract_quotes(context, name)
+                    company = company_associations.get(name, "")
                     
                     # Generate LinkedIn search URL
-                    search_terms = [name]
+                    search_terms = [clean_name]
                     if company:
                         search_terms.append(company.split()[0])
                     
@@ -763,28 +629,18 @@ class ProfileExtractor:
                         + "+".join(search_terms).replace(" ", "+")
                     )
                     
-                    # Calculate confidence score
-                    confidence = self.calculate_confidence_score(name, designation, company, quotes)
+                    profile = {
+                        "name": clean_name,
+                        "designation": "",
+                        "company": company,
+                        "quote": quote,
+                        "linkedin_search": linkedin_url,
+                        "confidence": "high" if company else "medium"
+                    }
                     
-                    # Only include profiles with high confidence
-                    if confidence >= 60:  # 60% confidence threshold
-                        profile = {
-                            "name": name,
-                            "designation": designation,
-                            "company": company,
-                            "quotes": quotes,
-                            "linkedin_search": linkedin_url,
-                            "confidence": confidence
-                        }
-                        
-                        # Add to profiles if not seen
-                        profile_key = self.get_profile_key(name, company)
-                        if profile_key not in seen_profiles:
-                            profiles.append(profile)
-                            seen_profiles.add(profile_key)
+                    profiles.append(profile)
+                    seen_names.add(clean_name)
         
-        # Sort profiles by confidence
-        profiles.sort(key=lambda x: x["confidence"], reverse=True)
         return profiles
 
 def validate_profile(name, designation, company, context):
@@ -891,7 +747,7 @@ def display_results(profiles):
             "name": "Name",
             "designation": "Designation",
             "company": "Company",
-            "quotes": st.column_config.ListColumn("Quotes"),
+            "quote": st.column_config.ListColumn("Quotes"),
             "linkedin_search": st.column_config.LinkColumn("LinkedIn Search"),
             "confidence": "Confidence"
         }
