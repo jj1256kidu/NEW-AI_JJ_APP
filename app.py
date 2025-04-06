@@ -42,9 +42,10 @@ def setup_nltk():
             nltk.download('punkt', quiet=True)
             nltk.download('punkt_tab', quiet=True)
             nltk.download('averaged_perceptron_tagger', quiet=True)
+            nltk.download('punkt_tab/english', quiet=True)  # Add specific English punkt data
         except Exception as e:
             st.error(f"Error downloading NLTK data: {str(e)}")
-            st.info("Please run: python -m nltk.downloader punkt punkt_tab averaged_perceptron_tagger")
+            st.info("Please run: python -m nltk.downloader punkt punkt_tab averaged_perceptron_tagger punkt_tab/english")
             raise
 
 # Initialize NLTK
