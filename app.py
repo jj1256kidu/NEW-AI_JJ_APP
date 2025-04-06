@@ -300,6 +300,7 @@ class ProfileExtractor:
         self.session = requests.Session()
         self.seen_profiles = set()
         self.driver = None
+        self.profile_cache = set()  # Add cache for deduplication
         
         # Load designation patterns
         self.designation_patterns = [
@@ -314,6 +315,20 @@ class ProfileExtractor:
             r'([A-Z][A-Za-z0-9\s&\.\-]+)\'s\s+(?:executive|manager|director|officer|lead|head)',
             r'([A-Z][A-Za-z0-9\s&\.\-]+(?:Bank|Tech|Software|Systems|Digital|Global|International))'
         ]
+
+    def is_duplicate(self, name, company):
+        """Check if a profile is a duplicate based on name and company."""
+        profile_key = f"{name.lower()}_{company.lower()}" if company else name.lower()
+        return profile_key in self.profile_cache
+
+    def add_to_cache(self, name, company):
+        """Add a profile to the deduplication cache."""
+        profile_key = f"{name.lower()}_{company.lower()}" if company else name.lower()
+        self.profile_cache.add(profile_key)
+
+    def clear_cache(self):
+        """Clear the deduplication cache."""
+        self.profile_cache.clear()
 
     def get_clean_text_from_url(self, url):
         """Get clean article content from URL with precise extraction."""
@@ -931,7 +946,8 @@ def main():
                 try:
                     with st.spinner("🔍 Analyzing article..."):
                         text = extractor.get_clean_text_from_url(url)
-                        if text:
+                        if text and not text.startswith("⚠️"):
+                            st.text_area("Extracted Article Content:", text, height=200)
                             profiles = extractor.extract_profiles(text)
                             
                             # Apply deduplication if enabled
@@ -943,11 +959,14 @@ def main():
                                         extractor.add_to_cache(profile['name'], profile['company'])
                                 profiles = unique_profiles
                             
-                            display_results(profiles)
+                            if profiles:
+                                display_results(profiles)
+                            else:
+                                st.warning("No profiles found in the article. Try a different article or paste the text directly.")
                         else:
-                            st.warning("Could not extract content from the URL. Try pasting the article text directly.")
-                except Exception:
-                    st.warning("Could not process the URL. Try pasting the article text directly.")
+                            st.warning(text)
+                except Exception as e:
+                    st.error(f"Error processing URL: {str(e)}")
 
     with tab2:
         text_input = st.text_area("Paste article text:", height=200,
@@ -966,7 +985,10 @@ def main():
                                 extractor.add_to_cache(profile['name'], profile['company'])
                         profiles = unique_profiles
                     
-                    display_results(profiles)
+                    if profiles:
+                        display_results(profiles)
+                    else:
+                        st.warning("No profiles found in the text. Try a different article.")
             else:
                 st.warning("Please enter some text")
 
