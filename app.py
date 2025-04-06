@@ -19,6 +19,14 @@ from fuzzywuzzy import fuzz
 import time
 import nltk
 
+# Page configuration must be the first Streamlit command
+st.set_page_config(
+    page_title="NewsNex – From News to Next Opportunities",
+    page_icon="🎯",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -39,14 +47,6 @@ def setup_nltk():
 
 # Initialize NLTK
 setup_nltk()
-
-# Page configuration
-st.set_page_config(
-    page_title="NewsNex – From News to Next Opportunities",
-    page_icon="🎯",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
 
 # Custom CSS with professional styling
 st.markdown("""
