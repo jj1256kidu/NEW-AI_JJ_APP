@@ -17,6 +17,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from fuzzywuzzy import fuzz
 import time
+import nltk
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -290,27 +291,39 @@ class ProfileExtractor:
         ]
 
     def get_clean_text_from_url(self, url):
-        """Extract text from URL using requests with optional Selenium fallback."""
+        """Get and clean text content from a URL."""
         if not url:
-            return ""
-        
-        # Try with requests first
-        content = self._get_text_with_requests(url)
-        
-        # If no content and Selenium is available, try with Selenium
-        if not content:
+            return "No URL provided"
+
+        try:
+            # First try with requests
+            response = requests.get(url, headers=self.headers, timeout=30)
+            response.raise_for_status()
+            content = self._extract_content_from_html(response.text)
+            
+            # If content is too short, try with selenium if available
+            if len(content.split()) < 50:
+                try:
+                    content = self._get_text_with_selenium(url)
+                except Exception as e:
+                    print(f"Selenium extraction failed: {str(e)}")
+            
+            if not content or len(content.split()) < 20:
+                return "Could not extract meaningful content from the URL. Please check if the URL is correct and accessible."
+            
+            return content
+
+        except requests.RequestException as e:
+            error_msg = f"Error fetching URL: {str(e)}"
+            print(error_msg)
             try:
-                from selenium import webdriver
-                from selenium.webdriver.chrome.options import Options
-                from selenium.webdriver.common.by import By
-                from selenium.webdriver.support.ui import WebDriverWait
-                from selenium.webdriver.support import expected_conditions as EC
+                # Fallback to selenium on request failure
                 content = self._get_text_with_selenium(url)
-            except ImportError:
-                # Selenium not available, skip this step
-                pass
-        
-        return content
+                if content:
+                    return content
+            except Exception as se:
+                print(f"Selenium fallback failed: {str(se)}")
+            return error_msg
 
     def _get_text_with_requests(self, url):
         """Extract text using requests."""
@@ -412,10 +425,14 @@ class ProfileExtractor:
             paragraphs = soup.find_all('p')
             content = ' '.join(p.get_text(strip=True) for p in paragraphs)
         
+        # If still no content, try getting all text
+        if not content:
+            content = soup.get_text(separator=' ', strip=True)
+        
         return self.clean_article_content(content)
 
     def clean_name(self, name):
-        """Clean and validate names with fuzzy matching."""
+        """Clean and validate names with stricter rules."""
         if not name:
             return ""
         
@@ -429,15 +446,24 @@ class ProfileExtractor:
         if not name_parts:
             return ""
         
+        # Must have at least first and last name
+        if len(name_parts) < 2:
+            return ""
+        
+        # Each part must be at least 2 characters
+        if any(len(part) < 2 for part in name_parts):
+            return ""
+        
         # Must start with capital letter
-        if not name_parts[0][0].isupper():
+        if not all(part[0].isupper() for part in name_parts):
             return ""
         
         # Check against common non-name words
         non_name_words = {
             'city', 'state', 'country', 'region', 'district',
             'company', 'organization', 'institute', 'university',
-            'news', 'article', 'story', 'report', 'update'
+            'news', 'article', 'story', 'report', 'update',
+            'today', 'yesterday', 'tomorrow', 'website'
         }
         
         # Use fuzzy matching to check for non-name words
@@ -500,38 +526,15 @@ class ProfileExtractor:
         
         # Remove common unwanted phrases
         unwanted_phrases = [
-            'cookie consent',
-            'privacy policy',
-            'terms of service',
-            'advertisement',
-            'subscribe now',
-            'share this article',
-            'read more',
-            'click here',
-            'follow us',
-            'related articles',
-            'also read',
-            'more from',
-            'newsletter',
-            'sign up',
-            'log in',
-            'register',
-            'download app',
-            'install app',
-            'copyright',
-            'all rights reserved',
-            'please wait',
-            'loading',
-            'sponsored content',
-            'advertisement',
-            'recommended for you',
-            'trending now',
-            'popular stories',
-            'share on',
-            'bookmark',
-            'print article',
-            'save article',
-            'comments'
+            'cookie consent', 'privacy policy', 'terms of service',
+            'advertisement', 'subscribe now', 'share this article',
+            'read more', 'click here', 'follow us', 'related articles',
+            'also read', 'more from', 'newsletter', 'sign up', 'log in',
+            'register', 'download app', 'install app', 'copyright',
+            'all rights reserved', 'please wait', 'loading',
+            'sponsored content', 'advertisement', 'recommended for you',
+            'trending now', 'popular stories', 'share on', 'bookmark',
+            'print article', 'save article', 'comments'
         ]
         
         # Create a pattern that matches any of these phrases
@@ -638,72 +641,41 @@ class ProfileExtractor:
                 score += 1
         
         # Calculate percentage and determine confidence level
-        confidence_percentage = (score / max_score) * 100
-        
-        if confidence_percentage >= 80:
-            return "very_high"
-        elif confidence_percentage >= 60:
-            return "high"
-        elif confidence_percentage >= 40:
-            return "medium"
-        else:
-            return "low"
+        confidence_percent = (score / max_score) * 100
+        return confidence_percent
 
     def extract_profiles(self, text):
-        """Extract profiles with improved quote extraction and confidence scoring."""
+        """Extract profiles from text with enhanced validation."""
         if not text:
             return []
-        
-        doc = self.nlp(text)
+
         profiles = []
-        seen_names = set()
+        seen_profiles = set()
         
-        # First pass: Find all quoted statements and their speakers
-        quote_speakers = {}
-        quote_pattern = r'"([^"]+)"\s*(?:,\s*)?(?:said|says|according to)\s+([A-Z][a-zA-Z]+)'
-        for match in re.finditer(quote_pattern, text):
-            quote = match.group(1).strip()
-            speaker = match.group(2).strip()
-            if speaker:
-                quote_speakers[speaker] = quote
+        # Find potential profile sections
+        sentences = nltk.sent_tokenize(text)
         
-        # Second pass: Find company associations
-        company_associations = {}
-        company_patterns = [
-            (r'([A-Z][a-zA-Z]+)(?:\s+(?:of|from|at|with))?\s+([A-Z][A-Za-z0-9]+(?:\s*,?\s*(?:Inc|Ltd|LLC|Corp|Corporation|Company|Group|Technologies|Solutions))?)', 2),
-            (r'([A-Z][a-zA-Z]+)\s*,?\s*([A-Z][A-Za-z0-9]+(?:\s*,?\s*(?:Inc|Ltd|LLC|Corp|Corporation|Company|Group|Technologies|Solutions))?)', 2),
-        ]
-        
-        for pattern, group in company_patterns:
-            for match in re.finditer(pattern, text):
-                name = match.group(1).strip()
-                company = match.group(group).strip()
-                if name and company:
-                    company_associations[name] = company
-        
-        # Process sentences for additional context
-        for sent in doc.sents:
-            sent_text = sent.text
+        for i, sentence in enumerate(sentences):
+            # Get context (previous and next sentences)
+            context_start = max(0, i - 2)
+            context_end = min(len(sentences), i + 3)
+            context = ' '.join(sentences[context_start:context_end])
             
-            # Look for names in the sentence
-            for ent in sent.ents:
+            # Extract names
+            doc = self.nlp(sentence)
+            for ent in doc.ents:
                 if ent.label_ == "PERSON":
                     name = self.clean_name(ent.text)
-                    if not name or name in seen_names:
+                    if not name or self.is_duplicate(name):
                         continue
                     
-                    # Extract quotes for this person
-                    quotes = self.extract_quotes(text, name)
+                    # Extract designation and company
+                    designation, company = self.extract_designation_and_company(context)
+                    if not designation and not company:
+                        continue
                     
-                    # Get company and designation
-                    company = company_associations.get(name, "")
-                    designation = ""
-                    
-                    # Look for designation in the sentence
-                    designation_pattern = r'(?:is|was|as|serves?\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief|CEO|CTO|CFO|COO|CIO|President|Director|Manager|Lead|Head|Officer|Executive))'
-                    designation_match = re.search(designation_pattern, sent_text, re.IGNORECASE)
-                    if designation_match:
-                        designation = designation_match.group(1).strip()
+                    # Extract quotes
+                    quotes = self.extract_quotes(context, name)
                     
                     # Generate LinkedIn search URL
                     search_terms = [name]
@@ -718,18 +690,25 @@ class ProfileExtractor:
                     # Calculate confidence score
                     confidence = self.calculate_confidence_score(name, designation, company, quotes)
                     
-                    profile = {
-                        "name": name,
-                        "designation": designation,
-                        "company": company,
-                        "quotes": quotes,
-                        "linkedin_search": linkedin_url,
-                        "confidence": confidence
-                    }
-                    
-                    profiles.append(profile)
-                    seen_names.add(name)
+                    # Only include profiles with high confidence
+                    if confidence >= 60:  # 60% confidence threshold
+                        profile = {
+                            "name": name,
+                            "designation": designation,
+                            "company": company,
+                            "quotes": quotes,
+                            "linkedin_search": linkedin_url,
+                            "confidence": confidence
+                        }
+                        
+                        # Add to profiles if not seen
+                        profile_key = self.get_profile_key(name, company)
+                        if profile_key not in seen_profiles:
+                            profiles.append(profile)
+                            seen_profiles.add(profile_key)
         
+        # Sort profiles by confidence
+        profiles.sort(key=lambda x: x["confidence"], reverse=True)
         return profiles
 
 def validate_profile(name, designation, company, context):
