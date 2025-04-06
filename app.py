@@ -34,19 +34,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 @st.cache_resource
 def setup_nltk():
     try:
-        # Try to find punkt data
         nltk.data.find('tokenizers/punkt')
     except LookupError:
-        try:
-            # Download all required NLTK data
-            nltk.download('punkt', quiet=True)
-            nltk.download('punkt_tab', quiet=True)
-            nltk.download('averaged_perceptron_tagger', quiet=True)
-            nltk.download('punkt_tab/english', quiet=True)  # Add specific English punkt data
-        except Exception as e:
-            st.error(f"Error downloading NLTK data: {str(e)}")
-            st.info("Please run: python -m nltk.downloader punkt punkt_tab averaged_perceptron_tagger punkt_tab/english")
-            raise
+        nltk.download('punkt', quiet=True)
 
 # Initialize NLTK
 try:
