@@ -290,16 +290,25 @@ class ProfileExtractor:
         ]
 
     def get_clean_text_from_url(self, url):
-        """Extract text from URL using both requests and Selenium for dynamic content."""
+        """Extract text from URL using requests with optional Selenium fallback."""
         if not url:
             return ""
         
         # Try with requests first
         content = self._get_text_with_requests(url)
         
-        # If no content, try with Selenium
+        # If no content and Selenium is available, try with Selenium
         if not content:
-            content = self._get_text_with_selenium(url)
+            try:
+                from selenium import webdriver
+                from selenium.webdriver.chrome.options import Options
+                from selenium.webdriver.common.by import By
+                from selenium.webdriver.support.ui import WebDriverWait
+                from selenium.webdriver.support import expected_conditions as EC
+                content = self._get_text_with_selenium(url)
+            except ImportError:
+                # Selenium not available, skip this step
+                pass
         
         return content
 
@@ -325,30 +334,33 @@ class ProfileExtractor:
 
     def _get_text_with_selenium(self, url):
         """Extract text using Selenium for JavaScript-rendered content."""
+        driver = None
         try:
-            if not self.driver:
-                self.driver = setup_selenium()
+            # Setup Chrome options
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
             
-            self.driver.get(url)
+            # Create driver
+            driver = webdriver.Chrome(options=chrome_options)
+            
+            # Load page
+            driver.get(url)
             
             # Wait for content to load
-            WebDriverWait(self.driver, 10).until(
+            WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
             
-            # Scroll to load lazy content
-            self.driver.execute_script(
-                "window.scrollTo(0, document.body.scrollHeight);"
-            )
-            time.sleep(2)  # Wait for any lazy-loaded content
-            
-            return self._extract_content_from_html(self.driver.page_source)
+            # Get page source
+            return self._extract_content_from_html(driver.page_source)
         except:
             return ""
         finally:
-            if self.driver:
-                self.driver.quit()
-                self.driver = None
+            if driver:
+                driver.quit()
 
     def _extract_content_from_html(self, html):
         """Extract and clean content from HTML."""
