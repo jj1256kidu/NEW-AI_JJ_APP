@@ -320,94 +320,173 @@ class ProfileExtractor:
         return text.strip()
 
     def get_clean_text_from_url(self, url):
-        """Extract and clean text from URL with improved error handling and multiple user agents."""
+        """Extract and clean text from URL with improved handling for modern news sites."""
         if not url:
             return ""
         
-        user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/91.0.864.59 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15'
-        ]
-        
+        # Modern browser headers
         headers = {
-            'User-Agent': random.choice(user_agents),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'DNT': '1',
             'Cache-Control': 'max-age=0'
         }
         
         try:
-            response = requests.get(url, headers=headers, timeout=15, verify=False)
+            # Create a session to handle cookies and redirects
+            session = requests.Session()
+            
+            # First request to handle redirects and get cookies
+            response = session.get(
+                url,
+                headers=headers,
+                timeout=30,
+                verify=False,
+                allow_redirects=True
+            )
             response.raise_for_status()
             
             # Parse with BeautifulSoup
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove unwanted elements
-            for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe', 'noscript']):
+            for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe', 'noscript', 'aside', 'form']):
                 element.decompose()
             
-            # Try multiple content extraction strategies
+            # Initialize content
             content = ""
             
-            # Strategy 1: Look for article content
-            article = soup.find('article') or soup.find(class_=re.compile(r'article|story|content|main|post|entry'))
-            if article:
-                content = article.get_text()
+            # Strategy 1: Look for article content with common class names
+            article_classes = [
+                'article-content',
+                'story-content',
+                'main-content',
+                'article-body',
+                'story-body',
+                'content-body',
+                'entry-content',
+                'post-content',
+                'article__content',
+                'article__body',
+                'story__content',
+                'story__body',
+                'cms-content',
+                'paywall-article-content'
+            ]
             
-            # Strategy 2: Look for specific content divs
+            for class_name in article_classes:
+                article = soup.find(['article', 'div', 'section'], class_=class_name)
+                if article:
+                    content = article.get_text(separator=' ', strip=True)
+                    break
+            
+            # Strategy 2: Look for article tag or main content div
             if not content:
-                content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text|body|main'))
-                content = ' '.join(div.get_text() for div in content_divs)
+                article = (
+                    soup.find('article') or 
+                    soup.find(['div', 'section'], class_=re.compile(r'article|story|content|main|post|entry', re.I)) or
+                    soup.find('main')
+                )
+                if article:
+                    content = article.get_text(separator=' ', strip=True)
             
-            # Strategy 3: Look for paragraphs
+            # Strategy 3: Look for paragraphs within content divs
+            if not content:
+                content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text|body|main', re.I))
+                paragraphs = []
+                for div in content_divs:
+                    paragraphs.extend(div.find_all('p'))
+                if paragraphs:
+                    content = ' '.join(p.get_text(strip=True) for p in paragraphs)
+            
+            # Strategy 4: Fall back to all paragraphs if no content found
             if not content:
                 paragraphs = soup.find_all('p')
-                content = ' '.join(p.get_text() for p in paragraphs)
+                content = ' '.join(p.get_text(strip=True) for p in paragraphs)
             
             if not content:
                 return ""
             
-            # Clean the extracted content
-            content = re.sub(r'\\s+', ' ', content)  # Normalize whitespace
-            content = re.sub(r'[^\\w\\s.,!?-]', '', content)  # Remove special characters
-            content = re.sub(r'\\s+([.,!?])', r'\\1', content)  # Fix spacing around punctuation
+            # Clean the content
+            content = self.clean_article_content(content)
             
-            # Remove common unwanted phrases
-            unwanted_phrases = [
-                'cookie consent',
-                'privacy policy',
-                'terms of service',
-                'advertisement',
-                'subscribe now',
-                'share this article',
-                'read more',
-                'click here',
-                'follow us',
-                'related articles',
-                'also read',
-                'more from',
-                'newsletter',
-                'sign up',
-                'log in',
-                'register',
-                'download',
-                'install',
-                'app',
-                'browser'
-            ]
-            for phrase in unwanted_phrases:
-                content = re.sub(rf'\\b{phrase}\\b', '', content, flags=re.IGNORECASE)
-            
-            return content.strip()
+            return content
             
         except requests.RequestException:
             return ""
         except Exception:
             return ""
+    
+    def clean_article_content(self, content):
+        """Clean and normalize article content."""
+        if not content:
+            return ""
+        
+        # Normalize whitespace
+        content = re.sub(r'\s+', ' ', content)
+        
+        # Remove common unwanted phrases
+        unwanted_phrases = [
+            'cookie consent',
+            'privacy policy',
+            'terms of service',
+            'advertisement',
+            'subscribe now',
+            'share this article',
+            'read more',
+            'click here',
+            'follow us',
+            'related articles',
+            'also read',
+            'more from',
+            'newsletter',
+            'sign up',
+            'log in',
+            'register',
+            'download app',
+            'install app',
+            'copyright',
+            'all rights reserved',
+            'please wait',
+            'loading',
+            'sponsored content',
+            'advertisement',
+            'recommended for you',
+            'trending now',
+            'popular stories',
+            'share on',
+            'bookmark',
+            'print article',
+            'save article',
+            'comments'
+        ]
+        
+        # Create a pattern that matches any of these phrases
+        pattern = '|'.join(map(re.escape, unwanted_phrases))
+        content = re.sub(rf'\b(?:{pattern})\b', '', content, flags=re.IGNORECASE)
+        
+        # Remove URLs
+        content = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', content)
+        
+        # Remove email addresses
+        content = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', '', content)
+        
+        # Remove multiple spaces and normalize punctuation
+        content = re.sub(r'\s+', ' ', content)
+        content = re.sub(r'\s+([.,!?])', r'\1', content)
+        
+        # Remove leading/trailing whitespace
+        content = content.strip()
+        
+        return content
 
     def extract_profiles(self, text):
         """Extract profiles with simplified rules."""
