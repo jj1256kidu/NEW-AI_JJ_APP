@@ -10,6 +10,13 @@ import subprocess
 import os
 from datetime import datetime
 import random
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from fuzzywuzzy import fuzz
+import time
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -240,60 +247,170 @@ def load_nlp_model():
         spacy.cli.download("en_core_web_sm")
         return spacy.load("en_core_web_sm")
 
+@st.cache_resource(show_spinner=False)
+def setup_selenium():
+    """Setup Selenium WebDriver with appropriate options."""
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920x1080")
+    chrome_options.add_argument("--disable-notifications")
+    chrome_options.add_argument("--disable-popup-blocking")
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+        "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    return driver
+
 class ProfileExtractor:
     def __init__(self):
         self.nlp = load_nlp_model()
         self.session = requests.Session()
-        self.seen_profiles = set()  # Cache for deduplication
+        self.seen_profiles = set()
+        self.driver = None
         
-        # Common name prefixes
-        self.name_prefixes = {
-            'mr', 'mrs', 'ms', 'dr', 'prof', 'shri', 'smt', 'sir',
-            'justice', 'adv', 'advocate', 'ca', 'er', 'eng'
-        }
+        # Load designation patterns
+        self.designation_patterns = [
+            r'(?:is|was|as|serves?\s+as|joined\s+as|appointed\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief|CEO|CTO|CFO|COO|CIO|President|Director|Manager|Lead|Head|Officer|Executive))',
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Executive|Senior|Principal|Global|Regional|Technical|Engineering|Product|Project)\s+(?:Director|Manager|Lead|Officer|Head))',
+            r'(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Founder|Co-founder|Partner|Managing Partner|General Partner|VP|Vice President|SVP|EVP))',
+        ]
         
-        # Invalid terms for filtering
-        self.invalid_terms = {
-            'india', 'china', 'usa', 'uk', 'europe', 'asia', 'africa',
-            'america', 'australia', 'canada', 'japan', 'russia',
-            'today', 'yesterday', 'tomorrow', 'news', 'latest', 'breaking',
-            'digi', 'yatra', 'article', 'update'
-        }
+        # Load company patterns
+        self.company_patterns = [
+            r'(?:at|with|from|of|,?\s+(?:of|at|from))?\s+([A-Z][A-Za-z0-9\s&\.\-]+(?:Inc\.|Ltd\.|LLC|Corp\.|Corporation|Company|Group|Technologies|Solutions))',
+            r'([A-Z][A-Za-z0-9\s&\.\-]+)\'s\s+(?:executive|manager|director|officer|lead|head)',
+            r'([A-Z][A-Za-z0-9\s&\.\-]+(?:Bank|Tech|Software|Systems|Digital|Global|International))'
+        ]
 
-    def get_profile_key(self, name, company):
-        """Generate a unique key for deduplication."""
-        return f"{name.lower()}|{company.lower()}" if company else name.lower()
+    def get_clean_text_from_url(self, url):
+        """Extract text from URL using both requests and Selenium for dynamic content."""
+        if not url:
+            return ""
+        
+        # Try with requests first
+        content = self._get_text_with_requests(url)
+        
+        # If no content, try with Selenium
+        if not content:
+            content = self._get_text_with_selenium(url)
+        
+        return content
 
-    def is_duplicate(self, name, company):
-        """Check if a profile is a duplicate based on name and company."""
-        key = self.get_profile_key(name, company)
-        return key in self.seen_profiles
+    def _get_text_with_requests(self, url):
+        """Extract text using requests."""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Cache-Control': 'max-age=0'
+            }
+            
+            response = self.session.get(url, headers=headers, timeout=15, verify=False)
+            response.raise_for_status()
+            
+            return self._extract_content_from_html(response.text)
+        except:
+            return ""
 
-    def add_to_cache(self, name, company):
-        """Add a profile to the deduplication cache."""
-        key = self.get_profile_key(name, company)
-        self.seen_profiles.add(key)
+    def _get_text_with_selenium(self, url):
+        """Extract text using Selenium for JavaScript-rendered content."""
+        try:
+            if not self.driver:
+                self.driver = setup_selenium()
+            
+            self.driver.get(url)
+            
+            # Wait for content to load
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            
+            # Scroll to load lazy content
+            self.driver.execute_script(
+                "window.scrollTo(0, document.body.scrollHeight);"
+            )
+            time.sleep(2)  # Wait for any lazy-loaded content
+            
+            return self._extract_content_from_html(self.driver.page_source)
+        except:
+            return ""
+        finally:
+            if self.driver:
+                self.driver.quit()
+                self.driver = None
 
-    def clear_cache(self):
-        """Clear the deduplication cache."""
-        self.seen_profiles.clear()
+    def _extract_content_from_html(self, html):
+        """Extract and clean content from HTML."""
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Remove unwanted elements
+        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe', 'noscript', 'aside', 'form']):
+            element.decompose()
+        
+        # Try multiple content extraction strategies
+        content = ""
+        
+        # Strategy 1: Look for article content with common class names
+        article_classes = [
+            'article-content', 'story-content', 'main-content',
+            'article-body', 'story-body', 'content-body',
+            'entry-content', 'post-content', 'article__content',
+            'article__body', 'story__content', 'story__body',
+            'cms-content', 'paywall-article-content'
+        ]
+        
+        for class_name in article_classes:
+            article = soup.find(['article', 'div', 'section'], class_=class_name)
+            if article:
+                content = article.get_text(separator=' ', strip=True)
+                break
+        
+        # Strategy 2: Look for article tag or main content div
+        if not content:
+            article = (
+                soup.find('article') or 
+                soup.find(['div', 'section'], class_=re.compile(r'article|story|content|main|post|entry', re.I)) or
+                soup.find('main')
+            )
+            if article:
+                content = article.get_text(separator=' ', strip=True)
+        
+        # Strategy 3: Look for paragraphs within content divs
+        if not content:
+            content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text|body|main', re.I))
+            paragraphs = []
+            for div in content_divs:
+                paragraphs.extend(div.find_all('p'))
+            if paragraphs:
+                content = ' '.join(p.get_text(strip=True) for p in paragraphs)
+        
+        # Strategy 4: Fall back to all paragraphs
+        if not content:
+            paragraphs = soup.find_all('p')
+            content = ' '.join(p.get_text(strip=True) for p in paragraphs)
+        
+        return self.clean_article_content(content)
 
     def clean_name(self, name):
-        """Basic name cleaning with minimal validation."""
+        """Clean and validate names with fuzzy matching."""
         if not name:
             return ""
         
         # Basic cleaning
         name = name.strip()
-        
-        # Remove numbers and special characters
         name = re.sub(r'[0-9]', '', name)
         name = re.sub(r'[^\w\s\-\']', '', name)
-        
-        # Basic validation
-        name = name.strip()
-        if not name:
-            return ""
         
         # Split into parts
         name_parts = name.split()
@@ -304,127 +421,63 @@ class ProfileExtractor:
         if not name_parts[0][0].isupper():
             return ""
         
+        # Check against common non-name words
+        non_name_words = {
+            'city', 'state', 'country', 'region', 'district',
+            'company', 'organization', 'institute', 'university',
+            'news', 'article', 'story', 'report', 'update'
+        }
+        
+        # Use fuzzy matching to check for non-name words
+        for part in name_parts:
+            if any(fuzz.ratio(part.lower(), word) > 85 for word in non_name_words):
+                return ""
+        
         # Capitalize each word
         name = ' '.join(word.capitalize() for word in name_parts)
         
         return name
 
-    def clean_text(self, text):
-        """Clean and standardize extracted text."""
-        if not text:
-            return ""
-        # Remove unwanted characters and normalize spacing
-        text = text.strip()
-        text = re.sub(r'\\s+', ' ', text)
-        text = re.sub(r'[^\\w\\s&\\-\\.]', '', text)
-        return text.strip()
-
-    def get_clean_text_from_url(self, url):
-        """Extract and clean text from URL with improved handling for modern news sites."""
-        if not url:
-            return ""
+    def validate_designation(self, designation):
+        """Validate designation with fuzzy matching."""
+        if not designation:
+            return False
         
-        # Modern browser headers
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'DNT': '1',
-            'Cache-Control': 'max-age=0'
+        valid_titles = [
+            'Chief', 'CEO', 'CTO', 'CFO', 'COO', 'CIO',
+            'President', 'Director', 'Manager', 'Lead',
+            'Head', 'Officer', 'Executive', 'Founder',
+            'Partner', 'VP', 'Vice President'
+        ]
+        
+        # Check if any valid title appears in the designation
+        return any(
+            any(fuzz.partial_ratio(title.lower(), word.lower()) > 85
+                for word in designation.split())
+            for title in valid_titles
+        )
+
+    def validate_company(self, company):
+        """Validate company name with fuzzy matching."""
+        if not company:
+            return False
+        
+        # Company must start with capital letter and have at least 2 characters
+        if len(company) < 2 or not company[0].isupper():
+            return False
+        
+        # Check against common non-company words
+        non_company_words = {
+            'news', 'article', 'story', 'report', 'update',
+            'today', 'yesterday', 'tomorrow', 'website'
         }
         
-        try:
-            # Create a session to handle cookies and redirects
-            session = requests.Session()
-            
-            # First request to handle redirects and get cookies
-            response = session.get(
-                url,
-                headers=headers,
-                timeout=30,
-                verify=False,
-                allow_redirects=True
-            )
-            response.raise_for_status()
-            
-            # Parse with BeautifulSoup
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Remove unwanted elements
-            for element in soup(['script', 'style', 'nav', 'header', 'footer', 'iframe', 'noscript', 'aside', 'form']):
-                element.decompose()
-            
-            # Initialize content
-            content = ""
-            
-            # Strategy 1: Look for article content with common class names
-            article_classes = [
-                'article-content',
-                'story-content',
-                'main-content',
-                'article-body',
-                'story-body',
-                'content-body',
-                'entry-content',
-                'post-content',
-                'article__content',
-                'article__body',
-                'story__content',
-                'story__body',
-                'cms-content',
-                'paywall-article-content'
-            ]
-            
-            for class_name in article_classes:
-                article = soup.find(['article', 'div', 'section'], class_=class_name)
-                if article:
-                    content = article.get_text(separator=' ', strip=True)
-                    break
-            
-            # Strategy 2: Look for article tag or main content div
-            if not content:
-                article = (
-                    soup.find('article') or 
-                    soup.find(['div', 'section'], class_=re.compile(r'article|story|content|main|post|entry', re.I)) or
-                    soup.find('main')
-                )
-                if article:
-                    content = article.get_text(separator=' ', strip=True)
-            
-            # Strategy 3: Look for paragraphs within content divs
-            if not content:
-                content_divs = soup.find_all(['div', 'section'], class_=re.compile(r'content|article|story|text|body|main', re.I))
-                paragraphs = []
-                for div in content_divs:
-                    paragraphs.extend(div.find_all('p'))
-                if paragraphs:
-                    content = ' '.join(p.get_text(strip=True) for p in paragraphs)
-            
-            # Strategy 4: Fall back to all paragraphs if no content found
-            if not content:
-                paragraphs = soup.find_all('p')
-                content = ' '.join(p.get_text(strip=True) for p in paragraphs)
-            
-            if not content:
-                return ""
-            
-            # Clean the content
-            content = self.clean_article_content(content)
-            
-            return content
-            
-        except requests.RequestException:
-            return ""
-        except Exception:
-            return ""
-    
+        # Use fuzzy matching to check for non-company words
+        return not any(
+            fuzz.ratio(company.lower(), word) > 85
+            for word in non_company_words
+        )
+
     def clean_article_content(self, content):
         """Clean and normalize article content."""
         if not content:
@@ -488,8 +541,104 @@ class ProfileExtractor:
         
         return content
 
+    def extract_quotes(self, text, name):
+        """Extract and validate quotes attributed to a person."""
+        if not text or not name:
+            return []
+        
+        quotes = []
+        
+        # Pattern 1: Direct quotes with attribution
+        patterns = [
+            # "Quote," said Name
+            rf'"([^"]+)"\s*,?\s*(?:said|says|according to|told)\s+{re.escape(name)}',
+            # Name said: "Quote"
+            rf'{re.escape(name)}\s+(?:said|says|added|noted|mentioned|explained|stated|commented):\s*"([^"]+)"',
+            # According to Name, "Quote"
+            rf'(?:According to|As per)\s+{re.escape(name)}[^"]*"([^"]+)"',
+            # Name: "Quote"
+            rf'{re.escape(name)}:\s*"([^"]+)"'
+        ]
+        
+        for pattern in patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                quote = match.group(1).strip()
+                if self.validate_quote(quote):
+                    quotes.append(quote)
+        
+        return quotes
+
+    def validate_quote(self, quote):
+        """Validate a quote based on various criteria."""
+        if not quote:
+            return False
+        
+        # Length validation (20-500 characters)
+        if len(quote) < 20 or len(quote) > 500:
+            return False
+        
+        # Must contain word characters
+        if not re.search(r'\w', quote):
+            return False
+        
+        # Should not be just a URL or email
+        if re.match(r'^https?://|^[\w\.-]+@[\w\.-]+\.\w+$', quote):
+            return False
+        
+        # Should not be just numbers or special characters
+        if not re.search(r'[a-zA-Z]{3,}', quote):
+            return False
+        
+        return True
+
+    def calculate_confidence_score(self, name, designation, company, quotes):
+        """Calculate confidence score for a profile."""
+        score = 0
+        max_score = 10
+        
+        # Name scoring (0-2 points)
+        if name:
+            score += 1
+            if len(name.split()) >= 2:  # Full name
+                score += 1
+        
+        # Designation scoring (0-3 points)
+        if designation:
+            score += 1
+            if len(designation.split()) >= 2:  # Detailed designation
+                score += 1
+            if self.validate_designation(designation):  # Valid designation
+                score += 1
+        
+        # Company scoring (0-2 points)
+        if company:
+            score += 1
+            if self.validate_company(company):  # Valid company
+                score += 1
+        
+        # Quote scoring (0-3 points)
+        if quotes:
+            score += 1
+            if len(quotes) >= 2:  # Multiple quotes
+                score += 1
+            if any(len(quote.split()) > 10 for quote in quotes):  # Substantial quote
+                score += 1
+        
+        # Calculate percentage and determine confidence level
+        confidence_percentage = (score / max_score) * 100
+        
+        if confidence_percentage >= 80:
+            return "very_high"
+        elif confidence_percentage >= 60:
+            return "high"
+        elif confidence_percentage >= 40:
+            return "medium"
+        else:
+            return "low"
+
     def extract_profiles(self, text):
-        """Extract profiles with simplified rules."""
+        """Extract profiles with improved quote extraction and confidence scoring."""
         if not text:
             return []
         
@@ -531,52 +680,21 @@ class ProfileExtractor:
                     if not name or name in seen_names:
                         continue
                     
-                    # Check if we have a quote or company for this name
-                    quote = quote_speakers.get(name, "")
-                    company = company_associations.get(name, "")
+                    # Extract quotes for this person
+                    quotes = self.extract_quotes(text, name)
                     
-                    # If we have either a quote or company, create a profile
-                    if quote or company:
-                        # Look for designation in the sentence
-                        designation = ""
-                        designation_pattern = r'(?:is|was|as|serves?\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief|CEO|CTO|CFO|COO|CIO|President|Director|Manager|Lead|Head|Officer|Executive))'
-                        designation_match = re.search(designation_pattern, sent_text, re.IGNORECASE)
-                        if designation_match:
-                            designation = designation_match.group(1).strip()
-                        
-                        # Generate LinkedIn search URL
-                        search_terms = [name]
-                        if company:
-                            search_terms.append(company.split()[0])
-                        
-                        linkedin_url = (
-                            "https://www.google.com/search?q=LinkedIn+"
-                            + "+".join(search_terms).replace(" ", "+")
-                        )
-                        
-                        profile = {
-                            "name": name,
-                            "designation": designation,
-                            "company": company,
-                            "quote": quote,
-                            "linkedin_search": linkedin_url,
-                            "confidence": "high" if (company and quote) else "medium"
-                        }
-                        
-                        profiles.append(profile)
-                        seen_names.add(name)
-            
-            # Also check for single-word names in quotes
-            for name, quote in quote_speakers.items():
-                if name not in seen_names:
-                    clean_name = self.clean_name(name)
-                    if not clean_name:
-                        continue
-                    
+                    # Get company and designation
                     company = company_associations.get(name, "")
+                    designation = ""
+                    
+                    # Look for designation in the sentence
+                    designation_pattern = r'(?:is|was|as|serves?\s+as)?\s*(?:the\s+)?([A-Z][A-Za-z\s\-]+(?:Chief|CEO|CTO|CFO|COO|CIO|President|Director|Manager|Lead|Head|Officer|Executive))'
+                    designation_match = re.search(designation_pattern, sent_text, re.IGNORECASE)
+                    if designation_match:
+                        designation = designation_match.group(1).strip()
                     
                     # Generate LinkedIn search URL
-                    search_terms = [clean_name]
+                    search_terms = [name]
                     if company:
                         search_terms.append(company.split()[0])
                     
@@ -585,17 +703,20 @@ class ProfileExtractor:
                         + "+".join(search_terms).replace(" ", "+")
                     )
                     
+                    # Calculate confidence score
+                    confidence = self.calculate_confidence_score(name, designation, company, quotes)
+                    
                     profile = {
-                        "name": clean_name,
-                        "designation": "",
+                        "name": name,
+                        "designation": designation,
                         "company": company,
-                        "quote": quote,
+                        "quotes": quotes,
                         "linkedin_search": linkedin_url,
-                        "confidence": "high" if company else "medium"
+                        "confidence": confidence
                     }
                     
                     profiles.append(profile)
-                    seen_names.add(clean_name)
+                    seen_names.add(name)
         
         return profiles
 
