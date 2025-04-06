@@ -279,7 +279,7 @@ class ProfileExtractor:
         self.seen_profiles.clear()
 
     def clean_name(self, name):
-        """Enhanced name cleaning with better validation."""
+        """Enhanced name cleaning with strict validation for real human names."""
         if not name:
             return ""
         
@@ -296,13 +296,36 @@ class ProfileExtractor:
         name = re.sub(r'[0-9]', '', name)
         name = re.sub(r'[^\w\s\-\']', '', name)
         
-        # Validate name
+        # Strict name validation
         name = name.strip()
-        if not name or len(name.split()) < 2 or len(name) < 4:
+        if not name:
+            return ""
+            
+        # Must have at least two words (first and last name)
+        name_parts = name.split()
+        if len(name_parts) < 2:
+            return ""
+            
+        # Each part must be at least 2 characters
+        if any(len(part) < 2 for part in name_parts):
+            return ""
+            
+        # Must start with capital letters
+        if not all(part[0].isupper() for part in name_parts):
+            return ""
+            
+        # Must not contain common non-name words
+        non_name_words = {
+            'city', 'state', 'country', 'region', 'district', 'zone',
+            'hello', 'hi', 'thanks', 'thank', 'welcome', 'good',
+            'app', 'tool', 'software', 'platform', 'system', 'service',
+            'brand', 'product', 'company', 'organization', 'institute'
+        }
+        if any(word.lower() in non_name_words for word in name_parts):
             return ""
         
         # Capitalize each word
-        name = ' '.join(word.capitalize() for word in name.split())
+        name = ' '.join(word.capitalize() for word in name_parts)
         
         return name
 
@@ -400,7 +423,7 @@ class ProfileExtractor:
             return ""
 
     def extract_profiles(self, text):
-        """Extract and clean professional profiles with comprehensive pattern matching."""
+        """Extract and clean professional profiles with strict validation."""
         if not text:
             st.warning("No text provided for analysis.")
             return []
@@ -526,6 +549,7 @@ class ProfileExtractor:
                     # Extract designations and companies with context
                     designations = []
                     companies = []
+                    quotes = []
                     
                     # Process patterns with context awareness
                     for pattern in designation_patterns:
@@ -542,13 +566,13 @@ class ProfileExtractor:
                             if company and len(company.split()) <= 6:
                                 companies.append(company)
                     
-                    # Debug information for each potential profile
-                    if name and (designations or companies):
-                        st.write(f"Found potential profile: {name}")
-                        if designations:
-                            st.write(f"Designations: {', '.join(designations)}")
-                        if companies:
-                            st.write(f"Companies: {', '.join(companies)}")
+                    # Extract quotes
+                    quote_pattern = r'["\'«]([^"\'»]+)["\'»]'
+                    quote_matches = re.finditer(quote_pattern, context['text'])
+                    for match in quote_matches:
+                        quote = match.group(1).strip()
+                        if len(quote) > 20 and len(quote) < 200:  # Reasonable quote length
+                            quotes.append(quote)
                     
                     # Validate and create profile
                     if designations or companies:
@@ -560,21 +584,21 @@ class ProfileExtractor:
                         )
                         
                         if validation_result['is_valid']:
+                            # Generate LinkedIn search URL
                             search_terms = [name]
-                            if designations:
-                                search_terms.extend(designations[0].split()[:2])
                             if companies:
                                 search_terms.append(companies[0].split()[0])
                             
                             linkedin_url = (
-                                "https://www.linkedin.com/search/results/people/?"
-                                f"keywords={'+'.join(search_terms).replace(' ', '%20')}"
+                                "https://www.google.com/search?q=LinkedIn+"
+                                + "+".join(search_terms).replace(" ", "+")
                             )
                             
                             profile = {
                                 "name": name,
                                 "designation": ' | '.join(designations) if designations else "",
                                 "company": ' | '.join(companies) if companies else "",
+                                "quote": quotes[0] if quotes else "",
                                 "linkedin_search": linkedin_url,
                                 "confidence": validation_result['confidence'],
                                 "score": validation_result['score']
